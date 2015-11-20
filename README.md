@@ -10,13 +10,22 @@
 目录结构组织如下：
 
 
-    －－策略名
+    －－ strategy  策略名
   
     ｜—— info.md  策略介绍
     
-    ｜—— python   策略实现
+    ｜—— python   策略python实现
     
        ｜— strategy.py  策略代码
+       
+       ｜－ strategy.ini 策略的配置文件
+
+    ｜—— csharp   策略csharp实现
+    
+       ｜— strategy.cs  策略代码
+
+       ｜－ strategy.ini 策略的配置文件
+       
 
 策略列表，逐步增加中，有需求或计划共享自己实现的一些经典策略的，请Pull Request本文件。
 
