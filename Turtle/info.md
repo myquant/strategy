@@ -17,6 +17,8 @@
 csv 文件示例如下：
 
 exchange, sec_id, buy_amount(¥)
+
 SZSE,300275,200000
+
 SHSE,600000,200000
  
