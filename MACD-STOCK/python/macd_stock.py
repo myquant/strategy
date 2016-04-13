@@ -218,8 +218,6 @@ class MACD_STOCK(StrategyBase):
             
 if __name__=='__main__':
     print get_version()
-    cur_date = datetime.date.today().strftime('%Y%m%d')
-    log_file = 'macd_stock' + cur_date + '.log'
     logging.config.fileConfig('macd_stock.ini')
     MACD_STOCK.read_ini('macd_stock.ini')
     MACD_STOCK.get_strategy_conf()
