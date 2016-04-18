@@ -205,48 +205,37 @@ class DualMA(StrategyBase):
 
     def close_long_positions(self, b_p, ord_price=None):
         self.print_positions()
-        # if not b_p.available > 0 and not b_p.available_today > 0:
-        #     self.logger.warning('long volume available today = {0}, available = {1}'.format(b_p.available_today, b_p.available))
-        #     return
-
         price = ord_price if ord_price else self.last_price - self.hops*self.tick_size
-        self.logger.info("close long ... {0} @ {1}".format(b_p.volume, price))
+        self.logger.info("try to close long ... {0} @ {1}, today's position first".format(b_p.volume, price))
 
-        if b_p.volume_today > 0:
-            self.close_long(self.exchange, self.sec_id, price, b_p.volume_today)
-            b_p.available_today -= b_p.volume_today
-            if b_p.volume > b_p.volume_today:
-                if self.exchange == u'SHFE':
-                    self.close_long_yesterday(self.exchange, self.sec_id, price, b_p.volume - b_p.volume_today)
-                else:
-                    self.close_long(self.exchange, self.sec_id, price, b_p.volume - b_p.volume_today)
-            b_p.available = 0
+        if b_p.exchange in (u'SHSE', u'SZSE'):  ## stocks
+            if b_p.available_yesterday:
+                self.close_long(b_p.exchange, b_p.sec_id, price, b_p.available_yesterday)
         else:
-            self.close_long_yesterday(self.exchange, self.sec_id, price, b_p.volume)
-            b_p.available = 0
+            if self.exchange == u'SHFE':    ## special in SHFE
+                if b_p.available_today > 0:
+                    self.close_long(b_p.exchange, b_p.sec_id, price, b_p.available_today)
+                if b_p.available_yesterday > 0:
+                    self.close_long_yesterday(b_p.exchange, b_p.sec_id, price, b_p.available_yesterday)
+            else:
+                self.close_long(b_p.exchange, b_p.sec_id, price, b_p.available)
 
     def close_short_positions(self, a_p, ord_price=None):
         self.print_positions()
-        # if not a_p.available > 0 and not a_p.available_today > 0:
-        #     self.logger.warning('No available, short volume available today = {0}, available = {1}'.format(a_p.available_today, a_p.available))
-        #     return
 
         price = ord_price if ord_price else self.last_price + self.hops*self.tick_size
-        self.logger.info("close short ... {0} @ {1}".format(a_p.volume, price))
+        self.logger.info("try to close short ... {0} @ {1}, today's position first".format(a_p.volume, price))
 
-        if a_p.volume_today > 0:
-            self.close_short(self.exchange, self.sec_id, price, a_p.volume_today)
-            a_p.available_today = 0
-            if a_p.volume > a_p.volume_today:
-                if self.exchange == u'SHFE':
-                    self.close_short_yesterday(self.exchange, self.sec_id, price, a_p.volume - a_p.volume_today)
-                else:
-                    self.close_short(self.exchange, self.sec_id, price, a_p.volume - a_p.volume_today)
-            a_p.available = 0
+        if a_p.exchange in (u'SHSE', u'SZSE'):  ## stocks, something must be wrong
+            pass
         else:
-            self.logger.debug("close yesterday position...")
-            self.close_short_yesterday(self.exchange, self.sec_id, price, a_p.volume)
-            a_p.available = 0
+            if self.exchange == u'SHFE':   ## special in SHFE
+                if a_p.available_today > 0:
+                    self.close_short(a_p.exchange, a_p.sec_id, price, a_p.available_today)
+                if a_p.available_yesterday > 0:
+                    self.close_short_yesterday(a_p.exchange, a_p.sec_id, price, a_p.available_yesterday)
+            else:
+                self.close_short(a_p.exchange, a_p.sec_id, price, a_p.available)
 
     def print_positions(self):
         if self.b_p:
