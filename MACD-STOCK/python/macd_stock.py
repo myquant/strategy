@@ -211,13 +211,15 @@ class MACD_STOCK(StrategyBase):
                 if pos is not None:
                     vol = pos.volume - pos.volume_today
                     if vol > 0 :
-                        self.open_short(bar.exchange, bar.sec_id, 0, vol)
-                        logging.info('open short, symbol:%s, time:%s '%(symbol, bar.strtime))
-                        print 'open short, symbol:%s, time:%s '%(symbol, bar.strtime)
+                        self.close_long(bar.exchange, bar.sec_id, 0, vol)
+                        logging.info('close long, symbol:%s, time:%s '%(symbol, bar.strtime))
+                        print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
             
 if __name__=='__main__':
     print get_version()
+    cur_date = datetime.date.today().strftime('%Y%m%d')
+    log_file = 'macd_stock' + cur_date + '.log'
     logging.config.fileConfig('macd_stock.ini')
     MACD_STOCK.read_ini('macd_stock.ini')
     MACD_STOCK.get_strategy_conf()
