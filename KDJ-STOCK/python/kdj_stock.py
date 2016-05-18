@@ -12,7 +12,10 @@ import talib
 import arrow
 from gmsdk import *
 
-eps = 1e-6
+EPS = 1e-6
+INIT_LOW_PRICE = 10000000
+INIT_HIGH_PRICE = -1 
+INIT_CLOSE_PRICE = 0
 
 class KDJ_STOCK(StrategyBase): 
     cls_config = None
@@ -38,13 +41,10 @@ class KDJ_STOCK(StrategyBase):
     def __init__( self, *args, **kwargs ):
         super(KDJ_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
-        self.dict_adj = {}
-        self.dict_high = {}
-        self.dict_low = {}
-        self.dict_close = {}
         self.dict_price = {}
         self.dict_openlong_signal = {}
-        self.dict_entry_high_low={}  
+        self.dict_entry_high_low={} 
+        self.dict_last_factor={}
     
     
     @classmethod
@@ -121,16 +121,21 @@ class KDJ_STOCK(StrategyBase):
         功能：获取订阅代码
         """
         cls.get_stock_pool( 'stock_pool.csv' )
-        bar_type_str = '.bar.' + '%d'%cls.cls_config.getint('para', 'bar_type')
+        bar_type = cls.cls_config.getint('para', 'bar_type')
+        if 86400 == bar_type:
+            bar_type_str = '.bar.' + 'daily'
+        else:
+            bar_type_str = '.bar.' + '%d'%cls.cls_config.getint('para', 'bar_type')
+            
         cls.cls_subscribe_symbols = ','.join(data + bar_type_str for data in cls.cls_stock_pool)
         return
         
-    @classmethod
-    def utc_strtime( utc_time ):
+        
+    def utc_strtime( self, utc_time ):
         """
         功能：utc转字符串时间
         """
-        str_time = '%s'%arrow.get(pos.init_time).to('local')
+        str_time = '%s'%arrow.get(utc_time).to('local')
         str_time.replace('T', ' ')
         str_time = str_time.replace('T', ' ')
         return str_time[:19]
@@ -181,6 +186,7 @@ class KDJ_STOCK(StrategyBase):
           
         self.dict_openlong_signal = {}   
         self.dict_entry_high_low = {}
+        self.get_last_factor()
         self.init_data()
         self.init_entry_high_low()
         return
@@ -191,7 +197,10 @@ class KDJ_STOCK(StrategyBase):
         功能：获取订阅代码的初始化数据
         """     
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, self.hist_size, self.cur_date)
+            #初始化买多信号字典
+            self.dict_openlong_signal.setdefault(ticker, False)            
+
+            daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
                 continue
             
@@ -199,7 +208,10 @@ class KDJ_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
             
-            end_adj_factor = end_daily_bars[0].adj_factor                
+            if not self.dict_last_factor.has_key(ticker):
+                continue
+            
+            end_adj_factor = self.dict_last_factor[ticker]              
             high_ls = [data.high * data.adj_factor/end_adj_factor for data in daily_bars]
             high_ls.reverse()
             low_ls = [data.low * data.adj_factor/end_adj_factor for data in daily_bars]
@@ -208,31 +220,59 @@ class KDJ_STOCK(StrategyBase):
             cp_ls.reverse()
             
             
-            slowk, slowd = talib.STOCH(high = np.asarray(high_ls),
-                                       low = np.asarray(low_ls),
-                                       close = np.asarray(cp_ls),
-                                       fastk_period= self.fastk_period, 
-                                       slowk_period = self.slowk_period,
-                                       slowk_matype = self.slowk_matype,
-                                       slowd_period = self.slowd_period,
-                                       slowd_matype = self.slowd_matype)
-            
-            
             #留出一个空位存储当天的一笔数据
-            high_ls.append(-1)
-            high = np.asarray(high_ls)
-            low_ls.append(-1)
-            low = np.asarray(low_ls)
-            cp_ls.append(-1)
-            close = np.asarray(cp_ls)
+            high_ls.append(INIT_HIGH_PRICE)
+            high = np.asarray(high_ls, dtype = np.float)
+            low_ls.append(INIT_LOW_PRICE)
+            low = np.asarray(low_ls, dtype = np.float)
+            cp_ls.append(INIT_CLOSE_PRICE)
+            close = np.asarray(cp_ls, dtype = np.float)
             
             #存储历史的high low close
             self.dict_price.setdefault( ticker, [high, low, close])
-            
-            #初始化买多信号字典
-            self.dict_openlong_signal.setdefault(ticker, False)
        
+        #end = time.clock()
+        #logging.info('init_data cost time: %f s' % (end - start))
+        
+    
+    def init_data_newday( self ): 
+        """
+        功能：新的一天初始化数据
+        """ 
+        #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
+        for key in self.dict_price:
+            if len(self.dict_price[key][0]) >= self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
+                self.dict_price[key][0] = np.append(self.dict_price[key][0][1:], INIT_HIGH_PRICE)
+            elif len(self.dict_price[key][0]) < self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
+                #未取足指标所需全部历史数据时回测过程中补充数据
+                self.dict_price[key][0] = np.append(self.dict_price[key][0][:], INIT_HIGH_PRICE)
+                
+            if len(self.dict_price[key][1]) >= self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
+                self.dict_price[key][1] = np.append(self.dict_price[key][1][1:], INIT_LOW_PRICE)
+            elif len(self.dict_price[key][1]) < self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
+                self.dict_price[key][1] = np.append(self.dict_price[key][1][:], INIT_LOW_PRICE)
+                
+            if len(self.dict_price[key][2]) >= self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_price[key][2] = np.append(self.dict_price[key][2][1:], INIT_CLOSE_PRICE)
+            elif len(self.dict_price[key][2]) < self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_CLOSE_PRICE)
+         
+                
+        #初始化买多信号字典
+        for key in self.dict_openlong_signal:
+            self.dict_openlong_signal.setdefault(key, False) 
             
+
+    def get_last_factor(self):
+        """
+        功能：获取指定日期最新的复权因子
+        """
+        for ticker in self.cls_stock_pool:
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )            
+            self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
+               
+
+
     def init_entry_high_low( self ):
         """
         功能：获取进场后的最高价和最低价,仿真或实盘交易启动时加载
@@ -251,18 +291,25 @@ class KDJ_STOCK(StrategyBase):
             high_list = [bar.high for bar in daily_bars]            
             low_list = [bar.low for bar in daily_bars]
         
-            highest = np.max( high_list )
-            lowest = np.min( low_list)
+            if len( high_list ) > 0:    
+                highest = np.max( high_list )
+            else:
+                highest = pos.vwap
             
-            self.dict_entry_high_low.setdefault(symbol, highest, lowest ) 
-            
+            if len( low_list ) > 0:            
+                lowest = np.min( low_list)
+            else:
+                lowest = pos.vwap
+                
+            self.dict_entry_high_low.setdefault(symbol, [highest, lowest] ) 
+                        
     
     def on_bar(self, bar):
         if self.cls_mode == gm.MD_MODE_PLAYBACK:           
             if bar.strtime[0:10] != self.cur_date[0:10]:
                 self.cur_date = bar.strtime[0:10] + ' 08:00:00'
                 #新的交易日
-                self.init_data( )  
+                self.init_data_newday()
                 
         symbol = bar.exchange + '.'+ bar.sec_id
             
@@ -274,10 +321,13 @@ class KDJ_STOCK(StrategyBase):
             return 
         
         if self.dict_price.has_key( symbol ):
-            nlen = len(self.dict_price[symbol][0])
-            self.dict_price[symbol][0][nlen-1] = bar.high
-            self.dict_price[symbol][1][nlen-1] = bar.low
-            self.dict_price[symbol][2][nlen-1] = bar.close
+            if self.dict_price[symbol][0][-1] < bar.high:
+                self.dict_price[symbol][0][-1] = bar.high
+                
+            if self.dict_price[symbol][1][-1] > bar.low:
+                self.dict_price[symbol][1][-1] = bar.low
+  
+            self.dict_price[symbol][2][-1] = bar.close
         
             slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
                                        low = self.dict_price[symbol][1],
