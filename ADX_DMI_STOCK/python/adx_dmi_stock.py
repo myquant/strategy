@@ -44,10 +44,6 @@ class ADX_DMI_STOCK(StrategyBase):
     def __init__( self, *args, **kwargs ):
         super(ADX_DMI_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
-        self.dict_adj = {}
-        self.dict_high = {}
-        self.dict_low = {}
-        self.dict_close = {}
         self.dict_price = {}
         self.dict_openlong_signal = {}
         self.dict_entry_high_low={}  
@@ -137,12 +133,11 @@ class ADX_DMI_STOCK(StrategyBase):
         return
         
         
-    @classmethod
-    def utc_strtime( utc_time ):
+    def utc_strtime( self, utc_time ):
         """
         功能：utc转字符串时间
         """
-        str_time = '%s'%arrow.get(pos.init_time).to('local')
+        str_time = '%s'%arrow.get(utc_time).to('local')
         str_time.replace('T', ' ')
         str_time = str_time.replace('T', ' ')
         return str_time[:19]
@@ -206,6 +201,10 @@ class ADX_DMI_STOCK(StrategyBase):
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
+                high = np.asarray( [INIT_HIGH_PRICE], dtype = np.float)
+                low = np.asarray( [INIT_LOW_PRICE], dtype = np.float)
+                close = np.asarray([INIT_CLOSE_PRICE], dtype = np.float) 
+                self.dict_price.setdefault( ticker, [high, low, close])
                 continue
             
             end_daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date)
@@ -226,11 +225,11 @@ class ADX_DMI_STOCK(StrategyBase):
             
             #留出一个空位存储当天的一笔数据
             high_ls.append(INIT_HIGH_PRICE)
-            high = np.asarray(high_ls )
+            high = np.asarray(high_ls, dtype = np.float)
             low_ls.append(INIT_LOW_PRICE)
-            low = np.asarray(low_ls)
+            low = np.asarray(low_ls, dtype = np.float)
             cp_ls.append(INIT_CLOSE_PRICE)
-            close = np.asarray(cp_ls )
+            close = np.asarray(cp_ls, dtype = np.float)
             
             #存储历史的high low close
             self.dict_price.setdefault( ticker, [high, low, close])
@@ -246,19 +245,20 @@ class ADX_DMI_STOCK(StrategyBase):
         #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
         for key in self.dict_price:
             if len(self.dict_price[key][0]) >= self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
-                #logging.info('init_data_newday begin high len: %s, data: %s'%(len(self.dict_price[key][0]), self.dict_price[key][0]))
                 self.dict_price[key][0] = np.append(self.dict_price[key][0][1:], INIT_HIGH_PRICE)
-                #logging.info('init_data_newday end high len: %s, data: %s'%(len(self.dict_price[key][0]), self.dict_price[key][0]))
+            elif len(self.dict_price[key][0]) < self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
+                #未取足指标所需全部历史数据时回测过程中补充数据
+                self.dict_price[key][0] = np.append(self.dict_price[key][0][:], INIT_HIGH_PRICE)
                 
             if len(self.dict_price[key][1]) >= self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
-                #logging.info('init_data_newday begin low len: %s, data: %s'%(len(self.dict_price[key][1]),self.dict_price[key][1]))
                 self.dict_price[key][1] = np.append(self.dict_price[key][1][1:], INIT_LOW_PRICE)
-                #logging.info('init_data_newday end low len: %s, data: %s'%(len(self.dict_price[key][1]), self.dict_price[key][1]))                 
+            elif len(self.dict_price[key][1]) < self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
+                self.dict_price[key][1] = np.append(self.dict_price[key][1][:], INIT_LOW_PRICE)
                 
             if len(self.dict_price[key][2]) >= self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
-                #logging.info('init_data_newday begin close len: %s, data: %s'%(len(self.dict_price[key][2]),self.dict_price[key][2]))
                 self.dict_price[key][2] = np.append(self.dict_price[key][2][1:], INIT_CLOSE_PRICE)
-                #logging.info('init_data_newday end close len: %s, data: %s'%(len(self.dict_price[key][2]), self.dict_price[key][2]))  
+            elif len(self.dict_price[key][2]) < self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_CLOSE_PRICE)
          
                 
         #初始化买多信号字典
@@ -268,7 +268,7 @@ class ADX_DMI_STOCK(StrategyBase):
 
     def get_last_factor(self):
         """
-        功能：获取最新的复权因子
+        功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
             daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )            
@@ -294,10 +294,17 @@ class ADX_DMI_STOCK(StrategyBase):
             high_list = [bar.high for bar in daily_bars]            
             low_list = [bar.low for bar in daily_bars]
         
-            highest = np.max( high_list )
-            lowest = np.min( low_list)
+            if len( high_list ) > 0:    
+                highest = np.max( high_list )
+            else:
+                highest = pos.vwap
             
-            self.dict_entry_high_low.setdefault(symbol, highest, lowest ) 
+            if len( low_list ) > 0:            
+                lowest = np.min( low_list)
+            else:
+                lowest = pos.vwap
+                
+            self.dict_entry_high_low.setdefault(symbol, [highest, lowest] ) 
                         
     
     def on_bar(self, bar):
@@ -305,7 +312,6 @@ class ADX_DMI_STOCK(StrategyBase):
             if bar.strtime[0:10] != self.cur_date[0:10]:
                 self.cur_date = bar.strtime[0:10] + ' 08:00:00'
                 #新的交易日
-                #self.init_data( )  
                 self.init_data_newday()
                 
         symbol = bar.exchange + '.'+ bar.sec_id
