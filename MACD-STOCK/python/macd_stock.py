@@ -11,7 +11,8 @@ import datetime
 import talib
 from gmsdk import *
 
-eps = 1e-6
+EPS = 1e-6
+INIT_CLOSE_PRICE = 0
 
 class MACD_STOCK(StrategyBase): 
     cls_config = None
@@ -37,9 +38,10 @@ class MACD_STOCK(StrategyBase):
     def __init__( self, *args, **kwargs ):
         super(MACD_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
-        self.dict_adj = {}
         self.dict_close = {}
         self.dict_openlong_signal = {}
+        self.dict_entry_high_low={} 
+        self.dict_last_factor={}
     
     
     @classmethod
@@ -115,11 +117,26 @@ class MACD_STOCK(StrategyBase):
         功能：获取订阅代码
         """
         cls.get_stock_pool( 'stock_pool.csv' )
-        bar_type_str = '.bar.' + '%d'%cls.cls_config.getint('para', 'bar_type')
+        bar_type = cls.cls_config.getint('para', 'bar_type')
+        if 86400 == bar_type:
+            bar_type_str = '.bar.' + 'daily'
+        else:
+            bar_type_str = '.bar.' + '%d'%cls.cls_config.getint('para', 'bar_type')
+            
         cls.cls_subscribe_symbols = ','.join(data + bar_type_str for data in cls.cls_stock_pool)
         return
         
         
+    def utc_strtime( self, utc_time ):
+        """
+        功能：utc转字符串时间
+        """
+        str_time = '%s'%arrow.get(utc_time).to('local')
+        str_time.replace('T', ' ')
+        str_time = str_time.replace('T', ' ')
+        return str_time[:19]
+    
+    
     def get_para_conf( self ):
         """
         功能：读取策略配置文件para(自定义参数)段落的值
@@ -134,6 +151,16 @@ class MACD_STOCK(StrategyBase):
         self.openlong_signal = self.cls_config.getint('para', 'openlong_signal')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         
+        self.is_fixation_stop = self.cls_config.getint('para', 'is_fixation_stop')
+        self.stop_fixation_profit = self.cls_config.getfloat('para', 'stop_fixation_profit')
+        self.stop_fixation_loss = self.cls_config.getfloat('para', 'stop_fixation_loss')
+    
+        self.is_movement_stop = self.cls_config.getint('para', 'is_movement_stop')
+        self.profit_ratio = self.cls_config.getfloat('para', 'profit_ratio')
+        self.stop_movement_profit = self.cls_config.getfloat('para', 'stop_movement_profit')
+        self.loss_ratio = self.cls_config.getfloat('para', 'loss_ratio')
+        self.stop_movement_loss = self.cls_config.getfloat('para', 'stop_movement_loss')        
+
         return
             
             
@@ -149,8 +176,10 @@ class MACD_STOCK(StrategyBase):
             self.end_date = datetime.date.today().strftime('%Y-%m-%d') + ' 16:00:00'
           
         self.dict_openlong_signal = {}   
-        
+        self.dict_entry_high_low = {}
+        self.get_last_factor()
         self.init_data()
+        self.init_entry_high_low()
         return
     
     
@@ -160,7 +189,10 @@ class MACD_STOCK(StrategyBase):
         功能：获取订阅代码的初始化数据
         """        
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, self.hist_size, self.cur_date)
+            #初始化买多信号字典
+            self.dict_openlong_signal.setdefault(ticker, 0)            
+
+            daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
                 continue
             
@@ -168,29 +200,91 @@ class MACD_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
             
-            end_adj_factor = end_daily_bars[0].adj_factor
+            if not self.dict_last_factor.has_key(ticker):
+                continue
+            
+            end_adj_factor = self.dict_last_factor[ticker]              
             cp_ls = [data.close * data.adj_factor/end_adj_factor for data in daily_bars]
             cp_ls.reverse()
             
             #留出一个空位存储当天的一笔数据
-            cp_ls.append(-1)
-            close = np.asarray(cp_ls)
+            cp_ls.append(INIT_CLOSE_PRICE)
+            close = np.asarray(cp_ls, dtype = np.float)
             
             #存储历史的close
             self.dict_close.setdefault( ticker, close )
             
-            #初始化买多信号字典
-            self.dict_openlong_signal.setdefault(ticker, 0)
             
-     
+    def init_data_newday( self ): 
+        """
+        功能：新的一天初始化数据
+        """ 
+        #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
+        for key in self.dict_close:                
+            if len(self.dict_close[key]) >= self.hist_size and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_close[key] = np.append(self.dict_close[key][1:], INIT_CLOSE_PRICE)
+            elif len(self.dict_close[key]) < self.hist_size and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                #未取足指标所需全部历史数据时回测过程中补充数据
+                self.dict_close[key] = np.append(self.dict_close[key][:], INIT_CLOSE_PRICE)
+         
+        #初始化买多信号字典
+        for key in self.dict_openlong_signal:
+            self.dict_openlong_signal.setdefault(key, False) 
+            
+
+    def get_last_factor(self):
+        """
+        功能：获取指定日期最新的复权因子
+        """
+        for ticker in self.cls_stock_pool:
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )            
+            self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
+               
+
+
+    def init_entry_high_low( self ):
+        """
+        功能：获取进场后的最高价和最低价,仿真或实盘交易启动时加载
+        """
+        pos_list = self.get_positions()
+        high_list = []
+        low_list = []
+        for pos in pos_list:
+            symbol = pos.exchange + '.' + pos.sec_id 
+            init_time = self.utc_strtime( pos.init_time)
+           
+            cur_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+            daily_bars = self.get_dailybars(symbol, init_time, cur_time)
+            
+            high_list = [bar.high for bar in daily_bars]            
+            low_list = [bar.low for bar in daily_bars]
+        
+            if len( high_list ) > 0:    
+                highest = np.max( high_list )
+            else:
+                highest = pos.vwap
+            
+            if len( low_list ) > 0:            
+                lowest = np.min( low_list)
+            else:
+                lowest = pos.vwap
+                
+            self.dict_entry_high_low.setdefault(symbol, [highest, lowest] ) 
+                        
+    
     def on_bar(self, bar):
         if self.cls_mode == gm.MD_MODE_PLAYBACK:           
             if bar.strtime[0:10] != self.cur_date[0:10]:
                 self.cur_date = bar.strtime[0:10] + ' 08:00:00'
                 #新的交易日
-                self.init_data( )  
+                self.init_data_newday()
                 
         symbol = bar.exchange + '.'+ bar.sec_id
+        
+        self.movement_stop_profit_loss(bar)
+        self.fixation_stop_profit_loss(bar)        
+
         if self.dict_close.has_key( symbol ):
             nlen = len(self.dict_close[symbol])
             self.dict_close[symbol][nlen-1] = bar.close
@@ -199,25 +293,112 @@ class MACD_STOCK(StrategyBase):
                                        fastperiod = self.short_term, 
                                        slowperiod = self.long_term, 
                                        signalperiod = self.macd_term)
-            if dif[-1] > eps and dea[-1] > eps and dif[-1] > dif[-2] and dif[-1] > dea[-1]:
+            if dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]:
                 self.dict_openlong_signal[symbol] += 1
                 if self.dict_openlong_signal[symbol] == self.openlong_signal :
                     self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
                     pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                    logging.info('open long, symbol:%s, time:%s '%(symbol, bar.strtime))
-                    print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-            elif dif[-1] < eps and dea[-1] < eps and dif[-1] < dif[-2] and dif[-1] < dea[-1]:
+                    logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
+                    #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
+            elif dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]:
                 pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
                 if pos is not None:
                     vol = pos.volume - pos.volume_today
                     if vol > 0 :
-                        self.open_short(bar.exchange, bar.sec_id, 0, vol)
-                        logging.info('open short, symbol:%s, time:%s '%(symbol, bar.strtime))
-                        print 'open short, symbol:%s, time:%s '%(symbol, bar.strtime)
+                        self.close_long(bar.exchange, bar.sec_id, 0, vol)
+                        logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
+                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+      
         
+    def on_order_filled(self, order):
+        symbol = order.exchange + '.' + order.sec_id
+        if order.side == OrderSide_Ask:
+            pos = self.get_position(order.exchange, order.sec_id)
+            if 0 == pos.volume:
+                self.dict_entry_high_low.pop(symbol)
+                
+    
+                
+    def fixation_stop_profit_loss(self, bar):
+        """
+        功能：固定止盈、止损,盈利或亏损超过了设置的比率则执行止盈、止损
+        """
+        if self.is_fixation_stop == 0:
+            return
+        
+        symbol = bar.exchange + '.' + bar.sec_id 
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
+        if pos is not None:
+            if pos.fpnl > 0 and pos.fpnl/pos.cost >= self.stop_fixation_profit:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                logging.info('fixnation stop profit: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, 
+                                bar.strtime, bar.close, pos.volume) )   
+            elif pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_profit:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today) 
+                logging.info('fixnation stop loss: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, 
+                                bar.strtime, bar.close, pos.volume))
+    
+        
+        
+    def movement_stop_profit_loss(self, bar):
+        """
+        功能：移动止盈、止损, 移动止盈止损按进场后的最高价、最低价乘以设置的比率与当前价格相比，
+              并且盈亏比率达到设定的盈亏比率时，执行止盈止损
+        """
+        if self.is_movement_stop == 0:
+            return 
+        
+        entry_high = None
+        entry_low = None
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
+        symbol = bar.exchange + '.' + bar.sec_id
+        
+        is_stop_profit = True
+        is_stop_loss = True
+        
+        if pos is not None:
+            if self.dict_entry_high_low.has_key( symbol):
+                if self.dict_entry_high_low[symbol][0] < bar.close:
+                    self.dict_entry_high_low[symbol][0] = bar.close
+                    is_stop_profit = False
+                elif self.dict_entry_high_low[symbol][1] > bar.close:
+                    self.dict_entry_high_low[symbol][1] = bar.close
+                    is_stop_loss = False
+                [entry_high, entry_low] = self.dict_entry_high_low[symbol]
+                
+            else:
+                self.dict_entry_high_low.setdefault(symbol, [bar.close, bar.close])
+                [entry_high, entry_low] = self.dict_entry_high_low[symbol]   
+                is_stop_loss = False
+                is_stop_profit = False
+                
+            if is_stop_profit and bar.close > pos.vwap:
+                #移动止盈
+                if bar.close < (1 - self.stop_movement_profit) * entry_high and pos.fpnl/pos.cost >= self.profit_ratio:
+                    if pos.volume - pos.volume_today > 0:
+                        self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                        logging.info('movement stop profit: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, bar.strtime, bar.close, pos.volume) )
+                        #print 'stop profit: close long, symbol:%s, time:%s '%(symbol, bar.strtime)        
+                
+                if bar.close > entry_high:
+                    self.dict_entry_high_low[symbol][0] = bar.close 
+                    
+            elif is_stop_loss and bar.close < pos.vwap:
+                #移动止损
+                if bar.close > (1 + self.stop_movement_loss) * entry_low and pos.fpnl/pos.cost <= -1 * self.loss_ratio:
+                    if pos.volume - pos.volume_today > 0:
+                        self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today) 
+                        logging.info('movement stop loss: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, bar.strtime, bar.close, pos.volume) )
+                        #print 'stop loss: close long, symbol:%s, time:%s '%(symbol, bar.strtime)  
+                        
+                if bar.close < entry_low:
+                    self.dict_entry_high_low[symbol][1] = bar.close                     
+            
             
 if __name__=='__main__':
     print get_version()
+    cur_date = datetime.date.today().strftime('%Y%m%d')
+    log_file = 'macd_stock' + cur_date + '.log'
     logging.config.fileConfig('macd_stock.ini')
     MACD_STOCK.read_ini('macd_stock.ini')
     MACD_STOCK.get_strategy_conf()

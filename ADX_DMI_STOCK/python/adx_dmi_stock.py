@@ -10,14 +10,17 @@ import numpy as np
 import datetime
 import talib
 import arrow
+import time
 from gmsdk import *
 
 EPS = 1e-6
+
 INIT_LOW_PRICE = 10000000
 INIT_HIGH_PRICE = -1 
 INIT_CLOSE_PRICE = 0
 
-class KDJ_STOCK(StrategyBase): 
+
+class ADX_DMI_STOCK(StrategyBase): 
     cls_config = None
     cls_user_name = None
     cls_password = None
@@ -39,13 +42,12 @@ class KDJ_STOCK(StrategyBase):
     
     
     def __init__( self, *args, **kwargs ):
-        super(KDJ_STOCK, self).__init__(*args, **kwargs)
+        super(ADX_DMI_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
         self.dict_price = {}
         self.dict_openlong_signal = {}
-        self.dict_entry_high_low={} 
+        self.dict_entry_high_low={}  
         self.dict_last_factor={}
-    
     
     @classmethod
     def read_ini(cls, ini_name ):
@@ -148,15 +150,10 @@ class KDJ_STOCK(StrategyBase):
         if self.cls_config is None:
             return
         
-        self.fastk_period = self.cls_config.getint('para', 'fastk_period')
-        self.slowk_period = self.cls_config.getint('para', 'slowk_period')
-        self.slowk_matype = self.cls_config.getint('para', 'slowk_matype')
-        self.slowd_period = self.cls_config.getint('para', 'slowd_period')
-        self.slowd_matype = self.cls_config.getint('para', 'slowd_matype')
-        self.slowk_bid = self.cls_config.getint('para', 'slowk_bid')
-        self.slowk_sell = self.cls_config.getint('para', 'slowk_sell')
-        self.slowd_bid = self.cls_config.getint('para', 'slowd_bid')
-        self.slowd_sell = self.cls_config.getint('para', 'slowd_sell')      
+        self.adx_period = self.cls_config.getint('para', 'adx_period')
+        self.dmi_period = self.cls_config.getint('para', 'dmi_period')
+        self.ma_short_period = self.cls_config.getint('para', 'ma_short_period')
+        self.ma_long_period = self.cls_config.getint('para', 'ma_long_period') 
         self.hist_size = self.cls_config.getint('para', 'hist_size')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         
@@ -195,13 +192,19 @@ class KDJ_STOCK(StrategyBase):
     def init_data(self):
         """
         功能：获取订阅代码的初始化数据
-        """     
+        """  
+        #start = time.clock()
+        
         for ticker in self.cls_stock_pool:
             #初始化买多信号字典
             self.dict_openlong_signal.setdefault(ticker, False)            
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
+                high = np.asarray( [INIT_HIGH_PRICE], dtype = np.float)
+                low = np.asarray( [INIT_LOW_PRICE], dtype = np.float)
+                close = np.asarray([INIT_CLOSE_PRICE], dtype = np.float) 
+                self.dict_price.setdefault( ticker, [high, low, close])
                 continue
             
             end_daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date)
@@ -328,29 +331,44 @@ class KDJ_STOCK(StrategyBase):
                 self.dict_price[symbol][1][-1] = bar.low
   
             self.dict_price[symbol][2][-1] = bar.close
-        
-            slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
-                                       low = self.dict_price[symbol][1],
-                                       close = self.dict_price[symbol][2],
-                                       fastk_period= self.fastk_period, 
-                                       slowk_period = self.slowk_period,
-                                       slowk_matype = self.slowk_matype,
-                                       slowd_period = self.slowd_period,
-                                       slowd_matype = self.slowd_matype)
             
-            if slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid:
+            high = self.dict_price[symbol][0]
+            if len( high ) < self.hist_size:
+                #logging.warn('high data is not enough, symbol: %s, data: %s'%(symbol, high))
+                return
+            
+            low = self.dict_price[symbol][1]
+            if len( low ) < self.hist_size:
+                #logging.warn('low data is not enough, symbol: %s, data: %s'%(symbol, low))
+                return
+            
+            close = self.dict_price[symbol][2]
+            if len( close ) < self.hist_size:
+                #logging.warn('low data is not enough, symbol: %s, data: %s'%(symbol, close))
+                return            
+            
+            adx = talib.ADX( high, low, close, timeperiod = self.adx_period )
+            
+            plus_di = talib.PLUS_DI(high, low, close, timeperiod = self.dmi_period)
+            
+            minus_di = talib.MINUS_DI(high, low, close, timeperiod = self.dmi_period)
+            
+            short_ma = talib.SMA(close, timeperiod = self.ma_short_period)
+            
+            long_ma = talib.SMA(close, timeperiod = self.ma_long_period)
+            
+            if short_ma[-1] > long_ma[-1] and short_ma[-2] < long_ma[-2] and adx[-1] > adx[-2] and plus_di[-1] > minus_di[-1]:
                 self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
-                self.dict_openlong_signal[symbol] = True
+                self.dict_openlong_signal[symbol] = True                
                 logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-            elif slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell:
+                
+            if short_ma[-1] < long_ma[-1] and short_ma[-2] > long_ma[-2] and adx[-1] < adx[-2] and plus_di[-1] < minus_di[-1]:
                 pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
                 if pos is not None:
                     vol = pos.volume - pos.volume_today
                     if vol > 0 :
                         self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
                         logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
         
     def on_order_filled(self, order):
@@ -440,31 +458,31 @@ class KDJ_STOCK(StrategyBase):
         
 if __name__=='__main__':
     print get_version()
-    logging.config.fileConfig('kdj_stock.ini')
-    KDJ_STOCK.read_ini('kdj_stock.ini')
-    KDJ_STOCK.get_strategy_conf()
+    logging.config.fileConfig('adx_dmi_stock.ini')
+    ADX_DMI_STOCK.read_ini('adx_dmi_stock.ini')
+    ADX_DMI_STOCK.get_strategy_conf()
     
-    kdj_stock = KDJ_STOCK( username = KDJ_STOCK.cls_user_name, 
-                             password = KDJ_STOCK.cls_password,
-                             strategy_id = KDJ_STOCK.cls_strategy_id,
-                             subscribe_symbols = KDJ_STOCK.cls_subscribe_symbols,
-                             mode = KDJ_STOCK.cls_mode,
-                             td_addr = KDJ_STOCK.cls_td_addr)
+    adx_dmi_stock = ADX_DMI_STOCK( username = ADX_DMI_STOCK.cls_user_name, 
+                             password = ADX_DMI_STOCK.cls_password,
+                             strategy_id = ADX_DMI_STOCK.cls_strategy_id,
+                             subscribe_symbols = ADX_DMI_STOCK.cls_subscribe_symbols,
+                             mode = ADX_DMI_STOCK.cls_mode,
+                             td_addr = ADX_DMI_STOCK.cls_td_addr)
     
-    if KDJ_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
-        KDJ_STOCK.get_backtest_conf()
-        ret = kdj_stock.backtest_config(start_time = KDJ_STOCK.cls_backtest_start , 
-                               end_time = KDJ_STOCK.cls_backtest_end, 
-                               initial_cash = KDJ_STOCK.cls_initial_cash, 
-                              transaction_ratio = KDJ_STOCK.cls_transaction_ratio, 
-                              commission_ratio = KDJ_STOCK.cls_commission_ratio, 
-                              slippage_ratio= KDJ_STOCK.cls_slippage_ratio, 
-                              price_type= KDJ_STOCK.cls_price_type, 
-                              bench_symbol= KDJ_STOCK.cls_bench_symbol )
+    if ADX_DMI_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
+        ADX_DMI_STOCK.get_backtest_conf()
+        ret = adx_dmi_stock.backtest_config(start_time = ADX_DMI_STOCK.cls_backtest_start , 
+                               end_time = ADX_DMI_STOCK.cls_backtest_end, 
+                               initial_cash = ADX_DMI_STOCK.cls_initial_cash, 
+                              transaction_ratio = ADX_DMI_STOCK.cls_transaction_ratio, 
+                              commission_ratio = ADX_DMI_STOCK.cls_commission_ratio, 
+                              slippage_ratio= ADX_DMI_STOCK.cls_slippage_ratio, 
+                              price_type= ADX_DMI_STOCK.cls_price_type, 
+                              bench_symbol= ADX_DMI_STOCK.cls_bench_symbol )
 
-    kdj_stock.get_para_conf()
-    kdj_stock.init_strategy()
-    ret = kdj_stock.run()
+    adx_dmi_stock.get_para_conf()
+    adx_dmi_stock.init_strategy()
+    ret = adx_dmi_stock.run()
 
     print 'run result %s'%ret
     
