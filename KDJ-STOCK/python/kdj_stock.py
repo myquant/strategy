@@ -42,7 +42,7 @@ class KDJ_STOCK(StrategyBase):
         super(KDJ_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
         self.dict_price = {}
-        self.dict_openlong_signal = {}
+        self.dict_open_close_signal = {}
         self.dict_entry_high_low={} 
         self.dict_last_factor={}
     
@@ -184,7 +184,7 @@ class KDJ_STOCK(StrategyBase):
             self.cur_date = datetime.date.today().strftime('%Y-%m-%d') + ' 08:00:00'
             self.end_date = datetime.date.today().strftime('%Y-%m-%d') + ' 16:00:00'
           
-        self.dict_openlong_signal = {}   
+        self.dict_open_close_signal = {}   
         self.dict_entry_high_low = {}
         self.get_last_factor()
         self.init_data()
@@ -197,8 +197,8 @@ class KDJ_STOCK(StrategyBase):
         功能：获取订阅代码的初始化数据
         """     
         for ticker in self.cls_stock_pool:
-            #初始化买多信号字典
-            self.dict_openlong_signal.setdefault(ticker, False)            
+            #初始化开仓操作信号字典
+            self.dict_open_close_signal.setdefault(ticker, False)            
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
@@ -258,9 +258,9 @@ class KDJ_STOCK(StrategyBase):
                 self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_CLOSE_PRICE)
          
                 
-        #初始化买多信号字典
-        for key in self.dict_openlong_signal:
-            self.dict_openlong_signal.setdefault(key, False) 
+        #初始化开仓操作信号字典
+        for key in self.dict_open_close_signal:
+            self.dict_open_close_signal.setdefault(key, False) 
             
 
     def get_last_factor(self):
@@ -316,20 +316,20 @@ class KDJ_STOCK(StrategyBase):
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)
         
-        if self.dict_openlong_signal[symbol] == True:
-            #当天已开仓，则不再开仓
-            return 
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         
-        if self.dict_price.has_key( symbol ):
-            if self.dict_price[symbol][0][-1] < bar.high:
-                self.dict_price[symbol][0][-1] = bar.high
+        if pos is None and self.dict_open_close_signal[symbol] is False:
+            #代码持仓为空且当天未有对该代码开、平仓
+            if self.dict_price.has_key( symbol ):
+                if self.dict_price[symbol][0][-1] < bar.high:
+                    self.dict_price[symbol][0][-1] = bar.high
                 
-            if self.dict_price[symbol][1][-1] > bar.low:
-                self.dict_price[symbol][1][-1] = bar.low
+                if self.dict_price[symbol][1][-1] > bar.low:
+                    self.dict_price[symbol][1][-1] = bar.low
   
-            self.dict_price[symbol][2][-1] = bar.close
+                self.dict_price[symbol][2][-1] = bar.close
         
-            slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
+                slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
                                        low = self.dict_price[symbol][1],
                                        close = self.dict_price[symbol][2],
                                        fastk_period= self.fastk_period, 
@@ -338,26 +338,28 @@ class KDJ_STOCK(StrategyBase):
                                        slowd_period = self.slowd_period,
                                        slowd_matype = self.slowd_matype)
             
-            if slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid:
-                self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
-                self.dict_openlong_signal[symbol] = True
-                logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-            elif slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell:
-                pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                if pos is not None:
-                    vol = pos.volume - pos.volume_today
-                    if vol > 0 :
-                        self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-                        logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                if slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid:
+                    self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
+                    self.dict_open_close_signal[symbol] = True
+                    logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+                    #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                elif slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell:
+                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
+                    if pos is not None:
+                        vol = pos.volume - pos.volume_today
+                        if vol > 0 :
+                            self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+                            self.dict_open_close_signal[symbol] = True
+                            logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
         
     def on_order_filled(self, order):
         symbol = order.exchange + '.' + order.sec_id
-        if order.side == OrderSide_Ask:
-            pos = self.get_position(order.exchange, order.sec_id)
-            if 0 == pos.volume:
+        if order.position_effect == PositionEffect_CloseYesterday \
+           and order.side == OrderSide_Bid:
+            pos = self.get_position(order.exchange, order.sec_id, order.side)
+            if pos is None and self.is_movement_stop == 1:
                 self.dict_entry_high_low.pop(symbol)
                 
                 

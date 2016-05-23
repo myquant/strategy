@@ -229,7 +229,7 @@ class MACD_STOCK(StrategyBase):
          
         #初始化买多信号字典
         for key in self.dict_openlong_signal:
-            self.dict_openlong_signal.setdefault(key, False) 
+            self.dict_openlong_signal.setdefault(key, 0) 
             
 
     def get_last_factor(self):
@@ -285,36 +285,39 @@ class MACD_STOCK(StrategyBase):
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)        
 
-        if self.dict_close.has_key( symbol ):
-            nlen = len(self.dict_close[symbol])
-            self.dict_close[symbol][nlen-1] = bar.close
-            close = self.dict_close[symbol]
-            dif, dea, macd= talib.MACD(close, 
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
+        if pos is None:
+            if self.dict_close.has_key( symbol ):
+                nlen = len(self.dict_close[symbol])
+                self.dict_close[symbol][nlen-1] = bar.close
+                close = self.dict_close[symbol]
+                dif, dea, macd= talib.MACD(close, 
                                        fastperiod = self.short_term, 
                                        slowperiod = self.long_term, 
                                        signalperiod = self.macd_term)
-            if dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]:
-                self.dict_openlong_signal[symbol] += 1
-                if self.dict_openlong_signal[symbol] == self.openlong_signal :
-                    self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
-                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                    logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
+                if dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]:
+                    self.dict_openlong_signal[symbol] += 1
+                    if self.dict_openlong_signal[symbol] == self.openlong_signal :
+                        self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
+                        pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
+                        logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-            elif dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]:
-                pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                if pos is not None:
-                    vol = pos.volume - pos.volume_today
-                    if vol > 0 :
-                        self.close_long(bar.exchange, bar.sec_id, 0, vol)
-                        logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
-                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                elif dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]:
+                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
+                    if pos is not None:
+                        vol = pos.volume - pos.volume_today
+                        if vol > 0 :
+                            self.close_long(bar.exchange, bar.sec_id, 0, vol)
+                            logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
+                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
       
         
     def on_order_filled(self, order):
         symbol = order.exchange + '.' + order.sec_id
-        if order.side == OrderSide_Ask:
-            pos = self.get_position(order.exchange, order.sec_id)
-            if 0 == pos.volume:
+        if order.position_effect == PositionEffect_CloseYesterday \
+           and order.side == OrderSide_Bid:
+            pos = self.get_position(order.exchange, order.sec_id, order.side)
+            if pos is None and self.is_movement_stop == 1:
                 self.dict_entry_high_low.pop(symbol)
                 
     
