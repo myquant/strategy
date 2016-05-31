@@ -228,8 +228,8 @@ class MACD_STOCK(StrategyBase):
                 self.dict_close[key] = np.append(self.dict_close[key][:], INIT_CLOSE_PRICE)
          
         #初始化买多信号字典
-        for key in self.dict_openlong_signal:
-            self.dict_openlong_signal.setdefault(key, 0) 
+        #for key in self.dict_openlong_signal:
+            #self.dict_openlong_signal.setdefault(key, 0) 
             
 
     def get_last_factor(self):
@@ -237,8 +237,9 @@ class MACD_STOCK(StrategyBase):
         功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )            
-            self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date ) 
+            if daily_bars is not None and len(daily_bars) > 0:
+                self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
                
 
 
@@ -281,15 +282,17 @@ class MACD_STOCK(StrategyBase):
                 self.init_data_newday()
                 
         symbol = bar.exchange + '.'+ bar.sec_id
-        
+               
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)        
 
+        #填充价格
+        if self.dict_close.has_key( symbol ):
+            self.dict_close[symbol][-1] = bar.close 
+            
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         if pos is None:
             if self.dict_close.has_key( symbol ):
-                nlen = len(self.dict_close[symbol])
-                self.dict_close[symbol][nlen-1] = bar.close
                 close = self.dict_close[symbol]
                 dif, dea, macd= talib.MACD(close, 
                                        fastperiod = self.short_term, 
@@ -300,6 +303,7 @@ class MACD_STOCK(StrategyBase):
                     if self.dict_openlong_signal[symbol] == self.openlong_signal :
                         self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
                         pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
+                        self.dict_openlong_signal[symbol] = 0
                         logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
                 elif dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]:

@@ -260,16 +260,16 @@ class KDJ_STOCK(StrategyBase):
                 
         #初始化开仓操作信号字典
         for key in self.dict_open_close_signal:
-            self.dict_open_close_signal.setdefault(key, False) 
-            
+            self.dict_open_close_signal[key] = False
 
     def get_last_factor(self):
         """
         功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )            
-            self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date ) 
+            if daily_bars is not None and len(daily_bars) > 0:
+                self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
                
 
 
@@ -318,17 +318,19 @@ class KDJ_STOCK(StrategyBase):
         
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         
+        #补充当天价格        
+        if self.dict_price.has_key( symbol ):
+            if self.dict_price[symbol][0][-1] < bar.high:
+                self.dict_price[symbol][0][-1] = bar.high
+        
+            if self.dict_price[symbol][1][-1] > bar.low:
+                self.dict_price[symbol][1][-1] = bar.low
+
+            self.dict_price[symbol][2][-1] = bar.close        
+
         if pos is None and self.dict_open_close_signal[symbol] is False:
             #代码持仓为空且当天未有对该代码开、平仓
             if self.dict_price.has_key( symbol ):
-                if self.dict_price[symbol][0][-1] < bar.high:
-                    self.dict_price[symbol][0][-1] = bar.high
-                
-                if self.dict_price[symbol][1][-1] > bar.low:
-                    self.dict_price[symbol][1][-1] = bar.low
-  
-                self.dict_price[symbol][2][-1] = bar.close
-        
                 slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
                                        low = self.dict_price[symbol][1],
                                        close = self.dict_price[symbol][2],
