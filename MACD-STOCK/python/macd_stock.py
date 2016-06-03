@@ -291,14 +291,14 @@ class MACD_STOCK(StrategyBase):
             self.dict_close[symbol][-1] = bar.close 
             
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
-        if pos is None:
-            if self.dict_close.has_key( symbol ):
-                close = self.dict_close[symbol]
-                dif, dea, macd= talib.MACD(close, 
-                                       fastperiod = self.short_term, 
-                                       slowperiod = self.long_term, 
-                                       signalperiod = self.macd_term)
-                if dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]:
+        
+        if self.dict_close.has_key( symbol ):
+            close = self.dict_close[symbol]
+            dif, dea, macd= talib.MACD(close, 
+                                fastperiod = self.short_term, 
+                                slowperiod = self.long_term, 
+                                signalperiod = self.macd_term)
+            if pos is None and (dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]):
                     self.dict_openlong_signal[symbol] += 1
                     if self.dict_openlong_signal[symbol] == self.openlong_signal :
                         self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
@@ -306,14 +306,12 @@ class MACD_STOCK(StrategyBase):
                         self.dict_openlong_signal[symbol] = 0
                         logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]:
-                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                    if pos is not None:
-                        vol = pos.volume - pos.volume_today
-                        if vol > 0 :
-                            self.close_long(bar.exchange, bar.sec_id, 0, vol)
-                            logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
-                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+            elif pos is not None and (dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]):
+                vol = pos.volume - pos.volume_today
+                if vol > 0 :
+                    self.close_long(bar.exchange, bar.sec_id, 0, vol)
+                    logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
+                    #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
       
         
     def on_order_filled(self, order):

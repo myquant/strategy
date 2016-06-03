@@ -329,8 +329,8 @@ class ATR_STOCK(StrategyBase):
 
             self.dict_price[symbol][2][-1] = bar.close        
 
-        if pos is None and self.dict_open_close_signal[symbol] is False:
-            #代码持仓为空且当天未有对该代码开、平仓
+        if self.dict_open_close_signal[symbol] is False:
+            #当天未有对该代码开、平仓
             if self.dict_price.has_key( symbol ):
                 
                 atr_index = talib.ATR(high=self.dict_price[symbol][0],
@@ -338,20 +338,18 @@ class ATR_STOCK(StrategyBase):
                                         close=self.dict_price[symbol][2],
                                         timeperiod=self.atr_period)
             
-                if bar.close > self.dict_prev_close[symbol] + atr_index[-1]*self.buy_multi_atr:
+                if pos is None and (bar.close > self.dict_prev_close[symbol] + atr_index[-1]*self.buy_multi_atr):
                     self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                     self.dict_open_close_signal[symbol] = True
                     logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif bar.close < self.dict_prev_close[symbol] - atr_index[-1]*self.buy_multi_atr:
-                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                    if pos is not None:
-                        vol = pos.volume - pos.volume_today
-                        if vol > 0 :
-                            self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-                            self.dict_open_close_signal[symbol] = True
-                            logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                elif pos is not None and (bar.close < self.dict_prev_close[symbol] - atr_index[-1]*self.buy_multi_atr):
+                    vol = pos.volume - pos.volume_today
+                    if vol > 0 :
+                        self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+                        self.dict_open_close_signal[symbol] = True
+                        logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
         if self.dict_prev_close.has_key( symbol ):
             self.dict_prev_close[symbol] = bar.close

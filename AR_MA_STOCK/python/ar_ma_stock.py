@@ -366,8 +366,8 @@ class AR_MA_STOCK(StrategyBase):
 
             self.dict_price[symbol][3][-1] = bar.close        
 
-        if pos is None and self.dict_open_close_signal[symbol] is False:
-            #代码持仓为空且当天未有对该代码开、平仓
+        if self.dict_open_close_signal[symbol] is False:
+            #当天未有对该代码开、平仓
             if self.dict_price.has_key( symbol ):
 
                 ma_short = talib.MA( self.dict_price[symbol][3], self.short_period)
@@ -376,20 +376,18 @@ class AR_MA_STOCK(StrategyBase):
                 
                 ar_index = self.cal_ar_index( symbol )
                 if ar_index is not None:
-                    if ar_index < self.ar_dwn and (ma_short[-1] > ma_mid[-1] and ma_mid[-1] > ma_long[-1]):
+                    if pos is None and (ar_index < self.ar_dwn and (ma_short[-1] > ma_mid[-1] and ma_mid[-1] > ma_long[-1])):
                         self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                         self.dict_open_close_signal[symbol] = True
                         logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                         #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                    elif ar_index > self.ar_upr and (ma_short[-1] < ma_mid[-1] and ma_mid[-1] < ma_long[-1]):
-                        pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                        if pos is not None:
-                            vol = pos.volume - pos.volume_today
-                            if vol > 0 :
-                                self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-                                self.dict_open_close_signal[symbol] = True
-                                logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                                #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                    elif pos is not None and (ar_index > self.ar_upr and (ma_short[-1] < ma_mid[-1] and ma_mid[-1] < ma_long[-1])):
+						vol = pos.volume - pos.volume_today
+						if vol > 0 :
+			    		self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+			    		self.dict_open_close_signal[symbol] = True
+			    		logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+			    		#print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
         
     def on_order_filled(self, order):

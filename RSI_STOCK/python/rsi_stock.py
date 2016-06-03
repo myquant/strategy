@@ -295,26 +295,24 @@ class RSI_STOCK(StrategyBase):
 
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         
-        if pos is None and self.dict_open_close_signal[symbol] is False:
-            #代码持仓为空且当天未有对该代码开、平仓
+        if self.dict_open_close_signal[symbol] is False:
+            #当天未有对该代码开、平仓
             if self.dict_close.has_key( symbol ):  
                 rsi_index = talib.RSI(self.dict_close[symbol],  timeperiod=self.rsi_period)
             
-                if rsi_index[-1] < self.over_sell:
+                if pos is None and  rsi_index[-1] < self.over_sell:
                     #超卖
                     self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                     self.dict_open_close_signal[symbol] = True
                     logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif rsi_index[-1] > self.over_buy:
-                    pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
-                    if pos is not None:
-                        vol = pos.volume - pos.volume_today
-                        if vol > 0 :
-                            self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-                            self.dict_open_close_signal[symbol] = True
-                            logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                elif pos is not None and  rsi_index[-1] > self.over_buy:
+                    vol = pos.volume - pos.volume_today
+                    if vol > 0 :
+                        self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+                        self.dict_open_close_signal[symbol] = True
+                        logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
         
     def on_order_filled(self, order):
