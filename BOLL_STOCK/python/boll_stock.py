@@ -13,11 +13,9 @@ import arrow
 from gmsdk import *
 
 EPS = 1e-6
-INIT_LOW_PRICE = 10000000
-INIT_HIGH_PRICE = -1 
 INIT_CLOSE_PRICE = 0
 
-class KDJ_STOCK(StrategyBase): 
+class BOLL_STOCK(StrategyBase): 
     cls_config = None
     cls_user_name = None
     cls_password = None
@@ -39,9 +37,9 @@ class KDJ_STOCK(StrategyBase):
     
     
     def __init__( self, *args, **kwargs ):
-        super(KDJ_STOCK, self).__init__(*args, **kwargs)
+        super(BOLL_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
-        self.dict_price = {}
+        self.dict_close = {}
         self.dict_open_close_signal = {}
         self.dict_entry_high_low={} 
         self.dict_last_factor={}
@@ -148,15 +146,11 @@ class KDJ_STOCK(StrategyBase):
         if self.cls_config is None:
             return
         
-        self.fastk_period = self.cls_config.getint('para', 'fastk_period')
-        self.slowk_period = self.cls_config.getint('para', 'slowk_period')
-        self.slowk_matype = self.cls_config.getint('para', 'slowk_matype')
-        self.slowd_period = self.cls_config.getint('para', 'slowd_period')
-        self.slowd_matype = self.cls_config.getint('para', 'slowd_matype')
-        self.slowk_bid = self.cls_config.getint('para', 'slowk_bid')
-        self.slowk_sell = self.cls_config.getint('para', 'slowk_sell')
-        self.slowd_bid = self.cls_config.getint('para', 'slowd_bid')
-        self.slowd_sell = self.cls_config.getint('para', 'slowd_sell')      
+        self.boll_period = self.cls_config.getint('para', 'boll_period')
+        self.nbdev_up = self.cls_config.getfloat('para', 'nbdev_up')
+        self.nbdev_down = self.cls_config.getfloat('para', 'nbdev_down')
+        self.ma_type = self.cls_config.getint('para', 'ma_type')
+        
         self.hist_size = self.cls_config.getint('para', 'hist_size')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         
@@ -197,7 +191,7 @@ class KDJ_STOCK(StrategyBase):
         功能：获取订阅代码的初始化数据
         """     
         for ticker in self.cls_stock_pool:
-            #初始化开仓操作信号字典
+            #初始化仓位操作信号字典
             self.dict_open_close_signal.setdefault(ticker, False)            
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
@@ -211,25 +205,16 @@ class KDJ_STOCK(StrategyBase):
             if not self.dict_last_factor.has_key(ticker):
                 continue
             
-            end_adj_factor = self.dict_last_factor[ticker]              
-            high_ls = [data.high * data.adj_factor/end_adj_factor for data in daily_bars]
-            high_ls.reverse()
-            low_ls = [data.low * data.adj_factor/end_adj_factor for data in daily_bars]
-            low_ls.reverse()            
+            end_adj_factor = self.dict_last_factor[ticker]                        
             cp_ls = [data.close * data.adj_factor/end_adj_factor for data in daily_bars]
             cp_ls.reverse()
             
-            
             #留出一个空位存储当天的一笔数据
-            high_ls.append(INIT_HIGH_PRICE)
-            high = np.asarray(high_ls, dtype = np.float)
-            low_ls.append(INIT_LOW_PRICE)
-            low = np.asarray(low_ls, dtype = np.float)
             cp_ls.append(INIT_CLOSE_PRICE)
-            close = np.asarray(cp_ls, dtype = np.float)
+            close = np.asarray(cp_ls, dtype = np.float)            
             
-            #存储历史的high low close
-            self.dict_price.setdefault( ticker, [high, low, close])
+            #存储历史的close
+            self.dict_close.setdefault( ticker, close)
        
         #end = time.clock()
         #logging.info('init_data cost time: %f s' % (end - start))
@@ -240,34 +225,24 @@ class KDJ_STOCK(StrategyBase):
         功能：新的一天初始化数据
         """ 
         #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
-        for key in self.dict_price:
-            if len(self.dict_price[key][0]) >= self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
-                self.dict_price[key][0] = np.append(self.dict_price[key][0][1:], INIT_HIGH_PRICE)
-            elif len(self.dict_price[key][0]) < self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
-                #未取足指标所需全部历史数据时回测过程中补充数据
-                self.dict_price[key][0] = np.append(self.dict_price[key][0][:], INIT_HIGH_PRICE)
-                
-            if len(self.dict_price[key][1]) >= self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
-                self.dict_price[key][1] = np.append(self.dict_price[key][1][1:], INIT_LOW_PRICE)
-            elif len(self.dict_price[key][1]) < self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
-                self.dict_price[key][1] = np.append(self.dict_price[key][1][:], INIT_LOW_PRICE)
-                
-            if len(self.dict_price[key][2]) >= self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
-                self.dict_price[key][2] = np.append(self.dict_price[key][2][1:], INIT_CLOSE_PRICE)
-            elif len(self.dict_price[key][2]) < self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
-                self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_CLOSE_PRICE)
+        for key in self.dict_close:
+            if len(self.dict_close[key]) >= self.hist_size and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_close[key] = np.append(self.dict_close[key][1:], INIT_CLOSE_PRICE)
+            elif len(self.dict_close[key]) < self.hist_size and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_close[key] = np.append(self.dict_close[key][:], INIT_CLOSE_PRICE)
          
                 
-        #初始化开仓操作信号字典
+        #初始化仓位操作信号字典
         for key in self.dict_open_close_signal:
-            self.dict_open_close_signal[key] = False
+            self.dict_open_close_signal[key] = False 
+            
 
     def get_last_factor(self):
         """
         功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date ) 
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )   
             if daily_bars is not None and len(daily_bars) > 0:
                 self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
                
@@ -316,36 +291,30 @@ class KDJ_STOCK(StrategyBase):
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)
         
+        #填充价格
+        if self.dict_close.has_key( symbol ):  
+            self.dict_close[symbol][-1] = bar.close        
+
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         
-        #补充当天价格        
-        if self.dict_price.has_key( symbol ):
-            if self.dict_price[symbol][0][-1] < bar.high:
-                self.dict_price[symbol][0][-1] = bar.high
-        
-            if self.dict_price[symbol][1][-1] > bar.low:
-                self.dict_price[symbol][1][-1] = bar.low
-
-            self.dict_price[symbol][2][-1] = bar.close        
-
         if self.dict_open_close_signal[symbol] is False:
             #当天未有对该代码开、平仓
-            if self.dict_price.has_key( symbol ):
-                slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
-                                       low = self.dict_price[symbol][1],
-                                       close = self.dict_price[symbol][2],
-                                       fastk_period= self.fastk_period, 
-                                       slowk_period = self.slowk_period,
-                                       slowk_matype = self.slowk_matype,
-                                       slowd_period = self.slowd_period,
-                                       slowd_matype = self.slowd_matype)
+            if self.dict_close.has_key( symbol ):  
+                upper, middle, lower = talib.BBANDS(self.dict_close[symbol],  timeperiod=self.boll_period, 
+                                     nbdevup=self.nbdev_up, nbdevdn=self.nbdev_down, matype=self.ma_type)
             
-                if pos is None and (slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid):
+                if pos is None and (upper[-1] > upper[-2] and upper[-2] > upper[-3]  \
+                   and middle[-1] > middle[-2] and middle[-2] > middle[-3] \
+                   and lower[-1] > lower[-2] and lower[-2] > lower[-3] \
+                   and bar.close > middle[-1]):
+                    #上、中、下轨同时向上运行
                     self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                     self.dict_open_close_signal[symbol] = True
                     logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif pos is not None and (slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell):
+                elif pos is not None and (upper[-1] < upper[-2] and middle[-1] < middle[-2] and lower[-1] < lower[-2] \
+                    or bar.close < middle[-1]):
+                    #上、中、下轨线同时向下运行时
                     vol = pos.volume - pos.volume_today
                     if vol > 0 :
                         self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
@@ -442,31 +411,31 @@ class KDJ_STOCK(StrategyBase):
         
 if __name__=='__main__':
     print get_version()
-    logging.config.fileConfig('kdj_stock.ini')
-    KDJ_STOCK.read_ini('kdj_stock.ini')
-    KDJ_STOCK.get_strategy_conf()
+    logging.config.fileConfig('boll_stock.ini')
+    BOLL_STOCK.read_ini('boll_stock.ini')
+    BOLL_STOCK.get_strategy_conf()
     
-    kdj_stock = KDJ_STOCK( username = KDJ_STOCK.cls_user_name, 
-                             password = KDJ_STOCK.cls_password,
-                             strategy_id = KDJ_STOCK.cls_strategy_id,
-                             subscribe_symbols = KDJ_STOCK.cls_subscribe_symbols,
-                             mode = KDJ_STOCK.cls_mode,
-                             td_addr = KDJ_STOCK.cls_td_addr)
+    boll_stock = BOLL_STOCK( username = BOLL_STOCK.cls_user_name, 
+                             password = BOLL_STOCK.cls_password,
+                             strategy_id = BOLL_STOCK.cls_strategy_id,
+                             subscribe_symbols = BOLL_STOCK.cls_subscribe_symbols,
+                             mode = BOLL_STOCK.cls_mode,
+                             td_addr = BOLL_STOCK.cls_td_addr)
     
-    if KDJ_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
-        KDJ_STOCK.get_backtest_conf()
-        ret = kdj_stock.backtest_config(start_time = KDJ_STOCK.cls_backtest_start , 
-                               end_time = KDJ_STOCK.cls_backtest_end, 
-                               initial_cash = KDJ_STOCK.cls_initial_cash, 
-                              transaction_ratio = KDJ_STOCK.cls_transaction_ratio, 
-                              commission_ratio = KDJ_STOCK.cls_commission_ratio, 
-                              slippage_ratio= KDJ_STOCK.cls_slippage_ratio, 
-                              price_type= KDJ_STOCK.cls_price_type, 
-                              bench_symbol= KDJ_STOCK.cls_bench_symbol )
+    if BOLL_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
+        BOLL_STOCK.get_backtest_conf()
+        ret = boll_stock.backtest_config(start_time = BOLL_STOCK.cls_backtest_start , 
+                               end_time = BOLL_STOCK.cls_backtest_end, 
+                               initial_cash = BOLL_STOCK.cls_initial_cash, 
+                              transaction_ratio = BOLL_STOCK.cls_transaction_ratio, 
+                              commission_ratio = BOLL_STOCK.cls_commission_ratio, 
+                              slippage_ratio= BOLL_STOCK.cls_slippage_ratio, 
+                              price_type= BOLL_STOCK.cls_price_type, 
+                              bench_symbol= BOLL_STOCK.cls_bench_symbol )
 
-    kdj_stock.get_para_conf()
-    kdj_stock.init_strategy()
-    ret = kdj_stock.run()
+    boll_stock.get_para_conf()
+    boll_stock.init_strategy()
+    ret = boll_stock.run()
 
     print 'run result %s'%ret
     

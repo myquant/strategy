@@ -13,11 +13,9 @@ import arrow
 from gmsdk import *
 
 EPS = 1e-6
-INIT_LOW_PRICE = 10000000
-INIT_HIGH_PRICE = -1 
 INIT_CLOSE_PRICE = 0
 
-class KDJ_STOCK(StrategyBase): 
+class Bollinger_Bandit(StrategyBase): 
     cls_config = None
     cls_user_name = None
     cls_password = None
@@ -39,10 +37,11 @@ class KDJ_STOCK(StrategyBase):
     
     
     def __init__( self, *args, **kwargs ):
-        super(KDJ_STOCK, self).__init__(*args, **kwargs)
+        super(Bollinger_Bandit, self).__init__(*args, **kwargs)
         self.cur_date = None
-        self.dict_price = {}
+        self.dict_close = {}
         self.dict_open_close_signal = {}
+        self.dict_position_period = {}
         self.dict_entry_high_low={} 
         self.dict_last_factor={}
     
@@ -148,16 +147,11 @@ class KDJ_STOCK(StrategyBase):
         if self.cls_config is None:
             return
         
-        self.fastk_period = self.cls_config.getint('para', 'fastk_period')
-        self.slowk_period = self.cls_config.getint('para', 'slowk_period')
-        self.slowk_matype = self.cls_config.getint('para', 'slowk_matype')
-        self.slowd_period = self.cls_config.getint('para', 'slowd_period')
-        self.slowd_matype = self.cls_config.getint('para', 'slowd_matype')
-        self.slowk_bid = self.cls_config.getint('para', 'slowk_bid')
-        self.slowk_sell = self.cls_config.getint('para', 'slowk_sell')
-        self.slowd_bid = self.cls_config.getint('para', 'slowd_bid')
-        self.slowd_sell = self.cls_config.getint('para', 'slowd_sell')      
-        self.hist_size = self.cls_config.getint('para', 'hist_size')
+        self.boll_bandit_period = self.cls_config.getint('para', 'boll_bandit_period')
+        self.up_ratio = self.cls_config.getfloat('para', 'up_ratio')
+        self.down_ratio = self.cls_config.getfloat('para', 'down_ratio')
+        self.roc_period = self.cls_config.getint('para', 'roc_period')
+        self.liq_days = self.cls_config.getint('para', 'liq_days')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         
         self.is_fixation_stop = self.cls_config.getint('para', 'is_fixation_stop')
@@ -197,10 +191,11 @@ class KDJ_STOCK(StrategyBase):
         功能：获取订阅代码的初始化数据
         """     
         for ticker in self.cls_stock_pool:
-            #初始化开仓操作信号字典
-            self.dict_open_close_signal.setdefault(ticker, False)            
+            #初始化仓位操作信号字典
+            self.dict_open_close_signal.setdefault(ticker, False)  
+            self.dict_position_period.setdefault(ticker, self.boll_bandit_period)
 
-            daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
+            daily_bars = self.get_last_n_dailybars(ticker, self.boll_bandit_period - 1, self.cur_date)
             if len(daily_bars) <= 0:
                 continue
             
@@ -211,28 +206,16 @@ class KDJ_STOCK(StrategyBase):
             if not self.dict_last_factor.has_key(ticker):
                 continue
             
-            end_adj_factor = self.dict_last_factor[ticker]              
-            high_ls = [data.high * data.adj_factor/end_adj_factor for data in daily_bars]
-            high_ls.reverse()
-            low_ls = [data.low * data.adj_factor/end_adj_factor for data in daily_bars]
-            low_ls.reverse()            
+            end_adj_factor = self.dict_last_factor[ticker]                        
             cp_ls = [data.close * data.adj_factor/end_adj_factor for data in daily_bars]
             cp_ls.reverse()
             
-            
             #留出一个空位存储当天的一笔数据
-            high_ls.append(INIT_HIGH_PRICE)
-            high = np.asarray(high_ls, dtype = np.float)
-            low_ls.append(INIT_LOW_PRICE)
-            low = np.asarray(low_ls, dtype = np.float)
             cp_ls.append(INIT_CLOSE_PRICE)
-            close = np.asarray(cp_ls, dtype = np.float)
+            close = np.asarray(cp_ls, dtype = np.float)            
             
-            #存储历史的high low close
-            self.dict_price.setdefault( ticker, [high, low, close])
-       
-        #end = time.clock()
-        #logging.info('init_data cost time: %f s' % (end - start))
+            #存储历史的close
+            self.dict_close.setdefault( ticker, close)
         
     
     def init_data_newday( self ): 
@@ -240,34 +223,35 @@ class KDJ_STOCK(StrategyBase):
         功能：新的一天初始化数据
         """ 
         #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
-        for key in self.dict_price:
-            if len(self.dict_price[key][0]) >= self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
-                self.dict_price[key][0] = np.append(self.dict_price[key][0][1:], INIT_HIGH_PRICE)
-            elif len(self.dict_price[key][0]) < self.hist_size and self.dict_price[key][0][-1] > INIT_HIGH_PRICE:
-                #未取足指标所需全部历史数据时回测过程中补充数据
-                self.dict_price[key][0] = np.append(self.dict_price[key][0][:], INIT_HIGH_PRICE)
-                
-            if len(self.dict_price[key][1]) >= self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
-                self.dict_price[key][1] = np.append(self.dict_price[key][1][1:], INIT_LOW_PRICE)
-            elif len(self.dict_price[key][1]) < self.hist_size and self.dict_price[key][1][-1] < INIT_LOW_PRICE:
-                self.dict_price[key][1] = np.append(self.dict_price[key][1][:], INIT_LOW_PRICE)
-                
-            if len(self.dict_price[key][2]) >= self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
-                self.dict_price[key][2] = np.append(self.dict_price[key][2][1:], INIT_CLOSE_PRICE)
-            elif len(self.dict_price[key][2]) < self.hist_size and abs(self.dict_price[key][2][-1] - INIT_CLOSE_PRICE) > EPS:
-                self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_CLOSE_PRICE)
+        for key in self.dict_close:
+            if len(self.dict_close[key]) >= self.boll_bandit_period and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_close[key] = np.append(self.dict_close[key][1:], INIT_CLOSE_PRICE)
+            elif len(self.dict_close[key]) < self.boll_bandit_period and abs(self.dict_close[key][-1] - INIT_CLOSE_PRICE) > EPS:
+                self.dict_close[key] = np.append(self.dict_close[key][:], INIT_CLOSE_PRICE)
          
                 
-        #初始化开仓操作信号字典
+        #初始化仓位操作信号字典
         for key in self.dict_open_close_signal:
-            self.dict_open_close_signal[key] = False
+            self.dict_open_close_signal[key] = False 
+            
+        #持仓周期
+        for key in self.dict_position_period:
+            index = key.find('.')
+            exchange = key[:index]
+            sec_id = key[index:]
+            pos = self.get_position(exchange, sec_id, OrderSide_Bid)
+            
+            if pos is not None and pos.volume > 0:
+                self.dict_position_period[key] = self.dict_position_period[key] -1 
+            else:
+                self.dict_position_period[key] = self.boll_bandit_period
 
     def get_last_factor(self):
         """
         功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date ) 
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )   
             if daily_bars is not None and len(daily_bars) > 0:
                 self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
                
@@ -316,44 +300,51 @@ class KDJ_STOCK(StrategyBase):
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)
         
+        #填充价格
+        if self.dict_close.has_key( symbol ):  
+            self.dict_close[symbol][-1] = bar.close        
+
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
         
-        #补充当天价格        
-        if self.dict_price.has_key( symbol ):
-            if self.dict_price[symbol][0][-1] < bar.high:
-                self.dict_price[symbol][0][-1] = bar.high
-        
-            if self.dict_price[symbol][1][-1] > bar.low:
-                self.dict_price[symbol][1][-1] = bar.low
-
-            self.dict_price[symbol][2][-1] = bar.close        
-
         if self.dict_open_close_signal[symbol] is False:
-            #当天未有对该代码开、平仓
-            if self.dict_price.has_key( symbol ):
-                slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
-                                       low = self.dict_price[symbol][1],
-                                       close = self.dict_price[symbol][2],
-                                       fastk_period= self.fastk_period, 
-                                       slowk_period = self.slowk_period,
-                                       slowk_matype = self.slowk_matype,
-                                       slowd_period = self.slowd_period,
-                                       slowd_matype = self.slowd_matype)
-            
-                if pos is None and (slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid):
+            #代码持仓为空且当天未有对该代码开、平仓
+            if self.dict_close.has_key( symbol ) and len(self.dict_close[symbol]) >= self.boll_bandit_period:
+                average_close = np.average( self.dict_close[symbol])
+                average_stddev = np.std(self.dict_close[symbol])
+                upper_band = average_close + average_stddev*self.up_ratio
+                down_band = average_close - average_stddev*self.down_ratio
+                roc_calc = bar.close - self.dict_close[symbol][self.boll_bandit_period - self.roc_period]
+                average_stop_loss = np.average( self.dict_close[symbol][self.dict_position_period[symbol]:])
+                
+                if pos is None and ( (roc_calc > EPS and bar.close > upper_band) \
+                    or (average_close > upper_band and bar.close <= average_close )):
+                    #当前价格大于roc周期的close，且上穿过了上轨
+                    #或者boll bandit周期的均价大于下轨且当前价格小于均价
                     self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                     self.dict_open_close_signal[symbol] = True
                     logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif pos is not None and (slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell):
-                    vol = pos.volume - pos.volume_today
-                    if vol > 0 :
-                        self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-                        self.dict_open_close_signal[symbol] = True
-                        logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                        #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
-        
-        
+                elif pos is not None:
+                    if (roc_calc < EPS and bar.close < down_band) \
+                     or (average_close < down_band and bar.close >= average_close ):
+                    #当前价格低于roc周期的close，且低于了下轨
+                    #或者boll bandit周期的均价低于下轨且当前价格小于均价
+                        vol = pos.volume - pos.volume_today
+                        if vol > 0 :
+                            self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+                            self.dict_open_close_signal[symbol] = True
+                            logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
+                            #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                elif bar.low < average_stop_loss:
+                    #止损
+                    stop_loss_price = average_stop_loss
+                    if stop_loss_price > bar.open:
+                        stop_loss_price = bar.open
+                        self.close_long(bar.exchange, bar.sec_id, stop_loss_price, vol)
+                        logging.info( 'stop loss by lip days,close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, stop_loss_price) )
+                    
+                
+                
     def on_order_filled(self, order):
         symbol = order.exchange + '.' + order.sec_id
         if order.position_effect == PositionEffect_CloseYesterday \
@@ -442,31 +433,31 @@ class KDJ_STOCK(StrategyBase):
         
 if __name__=='__main__':
     print get_version()
-    logging.config.fileConfig('kdj_stock.ini')
-    KDJ_STOCK.read_ini('kdj_stock.ini')
-    KDJ_STOCK.get_strategy_conf()
+    logging.config.fileConfig('bollinger_bandit.ini')
+    Bollinger_Bandit.read_ini('bollinger_bandit.ini')
+    Bollinger_Bandit.get_strategy_conf()
     
-    kdj_stock = KDJ_STOCK( username = KDJ_STOCK.cls_user_name, 
-                             password = KDJ_STOCK.cls_password,
-                             strategy_id = KDJ_STOCK.cls_strategy_id,
-                             subscribe_symbols = KDJ_STOCK.cls_subscribe_symbols,
-                             mode = KDJ_STOCK.cls_mode,
-                             td_addr = KDJ_STOCK.cls_td_addr)
+    bollinger_bandit = Bollinger_Bandit( username = Bollinger_Bandit.cls_user_name, 
+                             password = Bollinger_Bandit.cls_password,
+                             strategy_id = Bollinger_Bandit.cls_strategy_id,
+                             subscribe_symbols = Bollinger_Bandit.cls_subscribe_symbols,
+                             mode = Bollinger_Bandit.cls_mode,
+                             td_addr = Bollinger_Bandit.cls_td_addr)
     
-    if KDJ_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
-        KDJ_STOCK.get_backtest_conf()
-        ret = kdj_stock.backtest_config(start_time = KDJ_STOCK.cls_backtest_start , 
-                               end_time = KDJ_STOCK.cls_backtest_end, 
-                               initial_cash = KDJ_STOCK.cls_initial_cash, 
-                              transaction_ratio = KDJ_STOCK.cls_transaction_ratio, 
-                              commission_ratio = KDJ_STOCK.cls_commission_ratio, 
-                              slippage_ratio= KDJ_STOCK.cls_slippage_ratio, 
-                              price_type= KDJ_STOCK.cls_price_type, 
-                              bench_symbol= KDJ_STOCK.cls_bench_symbol )
+    if Bollinger_Bandit.cls_mode == gm.MD_MODE_PLAYBACK:
+        Bollinger_Bandit.get_backtest_conf()
+        ret = bollinger_bandit.backtest_config(start_time = Bollinger_Bandit.cls_backtest_start , 
+                               end_time = Bollinger_Bandit.cls_backtest_end, 
+                               initial_cash = Bollinger_Bandit.cls_initial_cash, 
+                              transaction_ratio = Bollinger_Bandit.cls_transaction_ratio, 
+                              commission_ratio = Bollinger_Bandit.cls_commission_ratio, 
+                              slippage_ratio= Bollinger_Bandit.cls_slippage_ratio, 
+                              price_type= Bollinger_Bandit.cls_price_type, 
+                              bench_symbol= Bollinger_Bandit.cls_bench_symbol )
 
-    kdj_stock.get_para_conf()
-    kdj_stock.init_strategy()
-    ret = kdj_stock.run()
+    bollinger_bandit.get_para_conf()
+    bollinger_bandit.init_strategy()
+    ret = bollinger_bandit.run()
 
     print 'run result %s'%ret
     

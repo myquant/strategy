@@ -17,7 +17,7 @@ INIT_LOW_PRICE = 10000000
 INIT_HIGH_PRICE = -1 
 INIT_CLOSE_PRICE = 0
 
-class KDJ_STOCK(StrategyBase): 
+class ATR_STOCK(StrategyBase): 
     cls_config = None
     cls_user_name = None
     cls_password = None
@@ -39,12 +39,13 @@ class KDJ_STOCK(StrategyBase):
     
     
     def __init__( self, *args, **kwargs ):
-        super(KDJ_STOCK, self).__init__(*args, **kwargs)
+        super(ATR_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
         self.dict_price = {}
         self.dict_open_close_signal = {}
         self.dict_entry_high_low={} 
         self.dict_last_factor={}
+        self.dict_prev_close={}
     
     
     @classmethod
@@ -148,15 +149,10 @@ class KDJ_STOCK(StrategyBase):
         if self.cls_config is None:
             return
         
-        self.fastk_period = self.cls_config.getint('para', 'fastk_period')
-        self.slowk_period = self.cls_config.getint('para', 'slowk_period')
-        self.slowk_matype = self.cls_config.getint('para', 'slowk_matype')
-        self.slowd_period = self.cls_config.getint('para', 'slowd_period')
-        self.slowd_matype = self.cls_config.getint('para', 'slowd_matype')
-        self.slowk_bid = self.cls_config.getint('para', 'slowk_bid')
-        self.slowk_sell = self.cls_config.getint('para', 'slowk_sell')
-        self.slowd_bid = self.cls_config.getint('para', 'slowd_bid')
-        self.slowd_sell = self.cls_config.getint('para', 'slowd_sell')      
+        self.atr_period = self.cls_config.getint('para', 'atr_period')  
+        self.buy_multi_atr = self.cls_config.getfloat('para', 'buy_multi_atr') 
+        self.sell_multi_atr = self.cls_config.getfloat('para', 'sell_multi_atr') 
+        
         self.hist_size = self.cls_config.getint('para', 'hist_size')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         
@@ -198,7 +194,8 @@ class KDJ_STOCK(StrategyBase):
         """     
         for ticker in self.cls_stock_pool:
             #初始化开仓操作信号字典
-            self.dict_open_close_signal.setdefault(ticker, False)            
+            self.dict_open_close_signal.setdefault(ticker, False)     
+            self.dict_prev_close.setdefault(ticker, None)
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
             if len(daily_bars) <= 0:
@@ -230,9 +227,6 @@ class KDJ_STOCK(StrategyBase):
             
             #存储历史的high low close
             self.dict_price.setdefault( ticker, [high, low, close])
-       
-        #end = time.clock()
-        #logging.info('init_data cost time: %f s' % (end - start))
         
     
     def init_data_newday( self ): 
@@ -261,6 +255,10 @@ class KDJ_STOCK(StrategyBase):
         #初始化开仓操作信号字典
         for key in self.dict_open_close_signal:
             self.dict_open_close_signal[key] = False
+            
+        #初始化前一笔价格
+        for key in self.dict_prev_close:
+            self.dict_prev_close[key] = None
 
     def get_last_factor(self):
         """
@@ -313,6 +311,9 @@ class KDJ_STOCK(StrategyBase):
                 
         symbol = bar.exchange + '.'+ bar.sec_id
             
+        if self.dict_prev_close.has_key( symbol ) and self.dict_prev_close[symbol] is None:
+            self.dict_prev_close[symbol] = bar.open
+            
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)
         
@@ -331,21 +332,18 @@ class KDJ_STOCK(StrategyBase):
         if self.dict_open_close_signal[symbol] is False:
             #当天未有对该代码开、平仓
             if self.dict_price.has_key( symbol ):
-                slowk, slowd = talib.STOCH(high = self.dict_price[symbol][0],
-                                       low = self.dict_price[symbol][1],
-                                       close = self.dict_price[symbol][2],
-                                       fastk_period= self.fastk_period, 
-                                       slowk_period = self.slowk_period,
-                                       slowk_matype = self.slowk_matype,
-                                       slowd_period = self.slowd_period,
-                                       slowd_matype = self.slowd_matype)
+                
+                atr_index = talib.ATR(high=self.dict_price[symbol][0],
+                                        low=self.dict_price[symbol][1],
+                                        close=self.dict_price[symbol][2],
+                                        timeperiod=self.atr_period)
             
-                if pos is None and (slowk[-1] < self.slowk_bid or slowd[-1] < self.slowd_bid):
+                if pos is None and (bar.close > self.dict_prev_close[symbol] + atr_index[-1]*self.buy_multi_atr):
                     self.open_long(bar.exchange, bar.sec_id, bar.close, self.open_vol)
                     self.dict_open_close_signal[symbol] = True
                     logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                     #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
-                elif pos is not None and (slowk[-1] > self.slowk_sell or slowd[-1] > self.slowd_sell):
+                elif pos is not None and (bar.close < self.dict_prev_close[symbol] - atr_index[-1]*self.buy_multi_atr):
                     vol = pos.volume - pos.volume_today
                     if vol > 0 :
                         self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
@@ -353,6 +351,9 @@ class KDJ_STOCK(StrategyBase):
                         logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
                         #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
         
+        if self.dict_prev_close.has_key( symbol ):
+            self.dict_prev_close[symbol] = bar.close
+             
         
     def on_order_filled(self, order):
         symbol = order.exchange + '.' + order.sec_id
@@ -442,31 +443,31 @@ class KDJ_STOCK(StrategyBase):
         
 if __name__=='__main__':
     print get_version()
-    logging.config.fileConfig('kdj_stock.ini')
-    KDJ_STOCK.read_ini('kdj_stock.ini')
-    KDJ_STOCK.get_strategy_conf()
+    logging.config.fileConfig('atr_stock.ini')
+    ATR_STOCK.read_ini('atr_stock.ini')
+    ATR_STOCK.get_strategy_conf()
     
-    kdj_stock = KDJ_STOCK( username = KDJ_STOCK.cls_user_name, 
-                             password = KDJ_STOCK.cls_password,
-                             strategy_id = KDJ_STOCK.cls_strategy_id,
-                             subscribe_symbols = KDJ_STOCK.cls_subscribe_symbols,
-                             mode = KDJ_STOCK.cls_mode,
-                             td_addr = KDJ_STOCK.cls_td_addr)
+    atr_stock = ATR_STOCK( username = ATR_STOCK.cls_user_name, 
+                             password = ATR_STOCK.cls_password,
+                             strategy_id = ATR_STOCK.cls_strategy_id,
+                             subscribe_symbols = ATR_STOCK.cls_subscribe_symbols,
+                             mode = ATR_STOCK.cls_mode,
+                             td_addr = ATR_STOCK.cls_td_addr)
     
-    if KDJ_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
-        KDJ_STOCK.get_backtest_conf()
-        ret = kdj_stock.backtest_config(start_time = KDJ_STOCK.cls_backtest_start , 
-                               end_time = KDJ_STOCK.cls_backtest_end, 
-                               initial_cash = KDJ_STOCK.cls_initial_cash, 
-                              transaction_ratio = KDJ_STOCK.cls_transaction_ratio, 
-                              commission_ratio = KDJ_STOCK.cls_commission_ratio, 
-                              slippage_ratio= KDJ_STOCK.cls_slippage_ratio, 
-                              price_type= KDJ_STOCK.cls_price_type, 
-                              bench_symbol= KDJ_STOCK.cls_bench_symbol )
+    if ATR_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
+        ATR_STOCK.get_backtest_conf()
+        ret = atr_stock.backtest_config(start_time = ATR_STOCK.cls_backtest_start , 
+                               end_time = ATR_STOCK.cls_backtest_end, 
+                               initial_cash = ATR_STOCK.cls_initial_cash, 
+                              transaction_ratio = ATR_STOCK.cls_transaction_ratio, 
+                              commission_ratio = ATR_STOCK.cls_commission_ratio, 
+                              slippage_ratio= ATR_STOCK.cls_slippage_ratio, 
+                              price_type= ATR_STOCK.cls_price_type, 
+                              bench_symbol= ATR_STOCK.cls_bench_symbol )
 
-    kdj_stock.get_para_conf()
-    kdj_stock.init_strategy()
-    ret = kdj_stock.run()
+    atr_stock.get_para_conf()
+    atr_stock.init_strategy()
+    ret = atr_stock.run()
 
     print 'run result %s'%ret
     
