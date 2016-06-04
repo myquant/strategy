@@ -32,8 +32,22 @@
 
 策略列表，逐步增加中，有需求或计划共享自己实现的一些经典策略的，请fork本项目，然后修改这个文件，并做Pull Request。
 
-1. 双均线策略 dual-ma
-2. 区间突破策略 dual-thrust 
-3. 动态突破策略 Dynamic Breakout
+- 趋向系统指标策略 ADX、DMI指标用于股票池
+- 人气指标策略 ar_ma 结合
+- 套利策略模板 arbitrage
+- 布林指标策略 boll-stock
+- 布林强盗策略 bollinger_bandit
+- RSI指标策略 RSI
+- KDJ指标策略 KDJ
+- MACD指标策略 MACD
+- 双均线策略 dual-ma
+- 区间突破策略 dual-thrust (未实现)
+- 动态突破策略 Dynamic Breakout
+- Hans 123策略
+- 反转突破策略 r-breaker
+- 空中花园策略 skypark
+- 简单海龟策略 
+- 仓位管理示例策略 position management
 
  ...... 
+ 未完待续 
