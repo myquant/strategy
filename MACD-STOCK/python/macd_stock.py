@@ -149,17 +149,16 @@ class MACD_STOCK(StrategyBase):
         self.macd_term = self.cls_config.getint('para', 'macd_term')
         self.hist_size = self.cls_config.getint('para', 'hist_size')
         self.openlong_signal = self.cls_config.getint('para', 'openlong_signal')
-        self.open_vol = self.cls_config.getint('para', 'open_vol')
         
+        self.open_vol = self.cls_config.getint('para', 'open_vol')       
+
         self.is_fixation_stop = self.cls_config.getint('para', 'is_fixation_stop')
+        self.is_movement_stop = self.cls_config.getint('para', 'is_movement_stop')
+
         self.stop_fixation_profit = self.cls_config.getfloat('para', 'stop_fixation_profit')
         self.stop_fixation_loss = self.cls_config.getfloat('para', 'stop_fixation_loss')
-    
-        self.is_movement_stop = self.cls_config.getint('para', 'is_movement_stop')
-        self.profit_ratio = self.cls_config.getfloat('para', 'profit_ratio')
-        self.stop_movement_profit = self.cls_config.getfloat('para', 'stop_movement_profit')
-        self.loss_ratio = self.cls_config.getfloat('para', 'loss_ratio')
-        self.stop_movement_loss = self.cls_config.getfloat('para', 'stop_movement_loss')        
+
+        self.stop_movement_profit = self.cls_config.getfloat('para', 'stop_movement_profit')  
 
         return
             
@@ -230,7 +229,7 @@ class MACD_STOCK(StrategyBase):
         #初始化买多信号字典
         #for key in self.dict_openlong_signal:
             #self.dict_openlong_signal.setdefault(key, 0) 
-            
+               
 
     def get_last_factor(self):
         """
@@ -299,19 +298,28 @@ class MACD_STOCK(StrategyBase):
                                 slowperiod = self.long_term, 
                                 signalperiod = self.macd_term)
             if pos is None and (dif[-1] > EPS and dea[-1] > EPS and dif[-1] > dif[-2] and dif[-1] > dea[-1]):
+                cash = self.get_cash()
+                cur_open_vol = self.open_vol
+                if cash.available/bar.close > self.open_vol:
+                    cur_open_vol = self.open_vol
+                else :
+                    cur_open_vol = int(cash.available/bar.close/100)*100
+                
+                if cur_open_vol == 0:
+                    print 'no available cash to buy, available cash: %.2f'%cash.available
+                else :            
                     self.dict_openlong_signal[symbol] += 1
                     if self.dict_openlong_signal[symbol] == self.openlong_signal :
                         self.open_long(bar.exchange, bar.sec_id, 0, self.open_vol)
                         pos = self.get_position( bar.exchange, bar.sec_id, OrderSide_Bid)
                         self.dict_openlong_signal[symbol] = 0
                         logging.info('open long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
-                    #print 'open long, symbol:%s, time:%s '%(symbol, bar.strtime)
             elif pos is not None and (dif[-1] < EPS and dea[-1] < EPS and dif[-1] < dif[-2] and dif[-1] < dea[-1]):
                 vol = pos.volume - pos.volume_today
                 if vol > 0 :
                     self.close_long(bar.exchange, bar.sec_id, 0, vol)
                     logging.info('close long, symbol:%s, time:%s, price:%.2f '%(symbol, bar.strtime, bar.close))
-                    #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+                    
       
         
     def on_order_filled(self, order):
@@ -336,19 +344,19 @@ class MACD_STOCK(StrategyBase):
         if pos is not None:
             if pos.fpnl > 0 and pos.fpnl/pos.cost >= self.stop_fixation_profit:
                 self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-                logging.info('fixnation stop profit: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, 
-                                bar.strtime, bar.close, pos.volume) )   
-            elif pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_profit:
-                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today) 
-                logging.info('fixnation stop loss: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, 
-                                bar.strtime, bar.close, pos.volume))
+                logging.info('fixnation stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap: %s, volume:%s'%(symbol, 
+                                bar.strtime, bar.close, pos.vwap, pos.volume) )   
+            elif pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_loss:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                logging.info('fixnation stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%s, volume:%s'%(symbol, 
+                                bar.strtime, bar.close, pos.vwap, pos.volume))
     
         
         
     def movement_stop_profit_loss(self, bar):
         """
-        功能：移动止盈、止损, 移动止盈止损按进场后的最高价、最低价乘以设置的比率与当前价格相比，
-              并且盈亏比率达到设定的盈亏比率时，执行止盈止损
+        功能：移动止盈, 移动止盈止损按进场后的最高价乘以设置的比率与当前价格相比，
+              并且盈利比率达到设定的盈亏比率时，执行止盈
         """
         if self.is_movement_stop == 0:
             return 
@@ -359,45 +367,35 @@ class MACD_STOCK(StrategyBase):
         symbol = bar.exchange + '.' + bar.sec_id
         
         is_stop_profit = True
-        is_stop_loss = True
         
-        if pos is not None:
+        if pos is not None and pos.volume > 0:
             if self.dict_entry_high_low.has_key( symbol):
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
-                elif self.dict_entry_high_low[symbol][1] > bar.close:
+                if self.dict_entry_high_low[symbol][1] > bar.close:
                     self.dict_entry_high_low[symbol][1] = bar.close
-                    is_stop_loss = False
                 [entry_high, entry_low] = self.dict_entry_high_low[symbol]
                 
             else:
                 self.dict_entry_high_low.setdefault(symbol, [bar.close, bar.close])
                 [entry_high, entry_low] = self.dict_entry_high_low[symbol]   
-                is_stop_loss = False
                 is_stop_profit = False
                 
-            if is_stop_profit and bar.close > pos.vwap:
+            if is_stop_profit:
                 #移动止盈
-                if bar.close < (1 - self.stop_movement_profit) * entry_high and pos.fpnl/pos.cost >= self.profit_ratio:
+                if bar.close <= (1 - self.stop_movement_profit) * entry_high and pos.fpnl/pos.cost >= self.stop_fixation_profit:
                     if pos.volume - pos.volume_today > 0:
                         self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-                        logging.info('movement stop profit: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, bar.strtime, bar.close, pos.volume) )
-                        #print 'stop profit: close long, symbol:%s, time:%s '%(symbol, bar.strtime)        
-                
-                if bar.close > entry_high:
-                    self.dict_entry_high_low[symbol][0] = bar.close 
-                    
-            elif is_stop_loss and bar.close < pos.vwap:
-                #移动止损
-                if bar.close > (1 + self.stop_movement_loss) * entry_low and pos.fpnl/pos.cost <= -1 * self.loss_ratio:
-                    if pos.volume - pos.volume_today > 0:
-                        self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today) 
-                        logging.info('movement stop loss: close long, symbol:%s, time:%s, price:%.2f, volume:%s'%(symbol, bar.strtime, bar.close, pos.volume) )
-                        #print 'stop loss: close long, symbol:%s, time:%s '%(symbol, bar.strtime)  
+                        logging.info('movement stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s'%(symbol, 
+                                                 bar.strtime, bar.close, pos.vwap, pos.volume) )   
                         
-                if bar.close < entry_low:
-                    self.dict_entry_high_low[symbol][1] = bar.close                     
+            #止损
+            if pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_loss:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                logging.info('movement stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s'%(symbol, 
+                                        bar.strtime, bar.close, pos.vwap, pos.volume))            
+                            
             
             
 if __name__=='__main__':
