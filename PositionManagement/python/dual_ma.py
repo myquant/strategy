@@ -208,11 +208,11 @@ class DualMA(StrategyBase):
         price = ord_price if ord_price else self.last_price - self.hops*self.tick_size
         self.logger.info("try to close long ... {0} @ {1}, today's position first".format(b_p.volume, price))
 
-        if b_p.exchange in (u'SHSE', u'SZSE'):  ## stocks
+        if b_p.exchange in ('SHSE', 'SZSE'):  ## stocks
             if b_p.available_yesterday:
                 self.close_long(b_p.exchange, b_p.sec_id, price, b_p.available_yesterday)
         else:
-            if self.exchange == u'SHFE':    ## special in SHFE
+            if self.exchange == 'SHFE':    ## special in SHFE
                 if b_p.available_today > 0:
                     self.close_long(b_p.exchange, b_p.sec_id, price, b_p.available_today)
                 if b_p.available_yesterday > 0:
@@ -226,10 +226,10 @@ class DualMA(StrategyBase):
         price = ord_price if ord_price else self.last_price + self.hops*self.tick_size
         self.logger.info("try to close short ... {0} @ {1}, today's position first".format(a_p.volume, price))
 
-        if a_p.exchange in (u'SHSE', u'SZSE'):  ## stocks, something must be wrong
+        if a_p.exchange in ('SHSE', 'SZSE'):  ## stocks, something must be wrong
             pass
         else:
-            if self.exchange == u'SHFE':   ## special in SHFE
+            if self.exchange == 'SHFE':   ## special in SHFE
                 if a_p.available_today > 0:
                     self.close_short(a_p.exchange, a_p.sec_id, price, a_p.available_today)
                 if a_p.available_yesterday > 0:
