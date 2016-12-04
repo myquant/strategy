@@ -2,11 +2,10 @@
 # encoding: utf-8
 
 
-import time
-from talib import SMA
 import numpy as np
 from collections import deque
 from gmsdk import *
+from talib import SMA
 
 # 算法用到的一些常量，阀值，主要用于信号过滤
 eps = 1e-6
@@ -40,7 +39,7 @@ class MA(StrategyBase):
 
         # prepare historical bars for MA calculating
         # 从数据服务中准备一段历史数据，使得收到第一个bar后就可以按需要计算ma
-        last_closes = [bar.close for bar in self.get_last_n_bars(self.symbol, self.bar_type, self.window_size)]
+        last_closes = [bar.close for bar in self.get_last_n_bars(self.symbol, self.bar_type, self.window_size,end_time=self.start_time)]
         last_closes.reverse()     #因为查询出来的时间是倒序排列，需要倒一下顺序
         self.close_buffer.extend(last_closes)
 
@@ -109,6 +108,12 @@ class MA(StrategyBase):
         else:       ##  其他情况，忽略不处理
             pass
 
+    ## 订单完全成交
+    def on_order_filled(self, order):
+        print('''
+        received order filled: sec_id: {0}, side: {1}, volume: {2}, filled price: {3}, filled: {4}
+        '''.format(order.sec_id, order.side, order.volume, order.filled_vwap, order.filled_volume))
+
 # 策略启动入口
 if __name__ == '__main__':
     #  初始化策略
@@ -118,5 +123,5 @@ if __name__ == '__main__':
     # 策略进入运行，等待数据事件
     ret = ma.run()
     # 打印策略退出状态
-    print("MA :", ma.get_strerror(ret))
+    print("MA exit: {}".format(ma.get_strerror(ret)))
 
