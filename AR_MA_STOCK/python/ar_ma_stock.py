@@ -11,12 +11,26 @@ import datetime
 import talib
 import arrow
 from gmsdk import *
-
+'''
+##人气指标（AR）介绍
+人气指标是以当天开市价为基础，即以当天市价分别比较当天最高、最低价，通过一定时期内开市价在股价中的地位，反映市场买卖人气。 
+其计算公式如下：
+AR=N日内（当日最高价—当日开市价）之和 / N日内（当日开市价—当日最低价）之和
+N为公式中的设定参数，一般设定为26日。
+使用法则
+（1）AR值以100为中心地带，其±20之间，即AR值在80－120之间波动时，属于盘整行情，股价走势比较平稳，不会出现剧烈波动。
+（2）AR值走高时表示行情活跃，人气旺盛，过高则表示股价进入高价，应选择时机退出，AR值的高度没有具体标准，一般情况下，AR值上升至150以上时，股价随时可能回档下跌。
+（3）AR值走低时表示人气衰退，需要充实，过低则暗示股价可能跌入低谷，可考虑伺机介入，一般AR值跌至70以下时，股价有可能随时反弹上升。
+（4）从AR曲线可以看出一段时期的买卖气势，并具有先于股价到达峰或跌入谷底的功能， 结合MA指标一起使用。
+MA:在上升行情进入稳定期，短周期、中周期、长周期移动平均线从上而下依次顺序排列，向右上方移动
+   在下跌行情中，短周期、中周期、长周期移动平均线自下而上依次顺序排列，向右下方移动，称为空头排列，预示股价将大幅下跌。
+'''
 EPS = 1e-6
 INIT_LOW_PRICE = 10000000.0
 INIT_HIGH_PRICE = -1.0
 INIT_CLOSE_PRICE = 0.0
 INIT_OPEN_PRICE = 0.0
+
 
 class AR_MA_STOCK(StrategyBase):
     cls_config = None
@@ -28,7 +42,6 @@ class AR_MA_STOCK(StrategyBase):
     cls_subscribe_symbols = None
     cls_stock_pool = []
 
-
     cls_backtest_start = None
     cls_backtest_end = None
     cls_initial_cash = 1000000
@@ -38,27 +51,25 @@ class AR_MA_STOCK(StrategyBase):
     cls_price_type = 1
     cls_bench_symbol = None
 
-    def __init__( self, *args, **kwargs ):
+    def __init__(self, *args, **kwargs):
         super(AR_MA_STOCK, self).__init__(*args, **kwargs)
         self.cur_date = None
         self.dict_price = {}
         self.dict_open_close_signal = {}
-        self.dict_entry_high_low={}
-        self.dict_last_factor={}
-        self.dict_open_cum_days={}
-    
-    
+        self.dict_entry_high_low = {}
+        self.dict_last_factor = {}
+        self.dict_open_cum_days = {}
+
     @classmethod
-    def read_ini(cls, ini_name ):
+    def read_ini(cls, ini_name):
         """
         功能：读取策略配置文件
         """
         cls.cls_config = ConfigParser.ConfigParser()
-        cls.cls_config.read( ini_name )
-
+        cls.cls_config.read(ini_name)
 
     @classmethod
-    def get_strategy_conf( cls ):
+    def get_strategy_conf(cls):
         """
         功能：读取策略配置文件strategy段落的值
         """
@@ -71,20 +82,19 @@ class AR_MA_STOCK(StrategyBase):
         cls.cls_subscribe_symbols = cls.cls_config.get('strategy', 'subscribe_symbols')
         cls.cls_mode = cls.cls_config.getint('strategy', 'mode')
         cls.cls_td_addr = cls.cls_config.get('strategy', 'td_addr')
-        if len(cls.cls_subscribe_symbols) <=0 :
+        if len(cls.cls_subscribe_symbols) <= 0:
             cls.get_subscribe_stock()
-        else :
+        else:
             subscribe_ls = cls.cls_subscribe_symbols.split(',')
             for data in subscribe_ls:
                 index1 = data.find('.')
-                index2 = data.find('.', index1+1, -1)
+                index2 = data.find('.', index1 + 1, -1)
                 cls.cls_stock_pool.append(data[:index2])
 
         return
 
-
     @classmethod
-    def get_backtest_conf( cls ):
+    def get_backtest_conf(cls):
         """
         功能：读取策略配置文件backtest段落的值
         """
@@ -102,47 +112,43 @@ class AR_MA_STOCK(StrategyBase):
 
         return
 
-
     @classmethod
-    def get_stock_pool(cls, csv_file ):
+    def get_stock_pool(cls, csv_file):
         """
         功能：获取股票池中的代码
         """
-        csvfile = file( csv_file, 'rb')
+        csvfile = file(csv_file, 'rb')
         reader = csv.reader(csvfile)
         for line in reader:
             cls.cls_stock_pool.append(line[0])
 
         return
 
-
     @classmethod
-    def get_subscribe_stock( cls ):
+    def get_subscribe_stock(cls):
         """
         功能：获取订阅代码
         """
-        cls.get_stock_pool( 'stock_pool.csv' )
+        cls.get_stock_pool('stock_pool.csv')
         bar_type = cls.cls_config.getint('para', 'bar_type')
         if 86400 == bar_type:
             bar_type_str = '.bar.' + 'daily'
         else:
-            bar_type_str = '.bar.' + '%d'%cls.cls_config.getint('para', 'bar_type')
+            bar_type_str = '.bar.' + '%d' % cls.cls_config.getint('para', 'bar_type')
 
         cls.cls_subscribe_symbols = ','.join(data + bar_type_str for data in cls.cls_stock_pool)
         return
 
-
-    def utc_strtime( self, utc_time ):
+    def utc_strtime(self, utc_time):
         """
         功能：utc转字符串时间
         """
-        str_time = '%s'%arrow.get(utc_time).to('local')
+        str_time = '%s' % arrow.get(utc_time).to('local')
         str_time.replace('T', ' ')
         str_time = str_time.replace('T', ' ')
         return str_time[:19]
 
-
-    def get_para_conf( self ):
+    def get_para_conf(self):
         """
         功能：读取策略配置文件para(自定义参数)段落的值
         """
@@ -160,18 +166,16 @@ class AR_MA_STOCK(StrategyBase):
         self.hist_size = self.cls_config.getint('para', 'hist_size')
         self.open_vol = self.cls_config.getint('para', 'open_vol')
         self.open_max_days = self.cls_config.getint('para', 'open_max_days')
-    
+
         self.is_fixation_stop = self.cls_config.getint('para', 'is_fixation_stop')
         self.is_movement_stop = self.cls_config.getint('para', 'is_movement_stop')
-    
+
         self.stop_fixation_profit = self.cls_config.getfloat('para', 'stop_fixation_profit')
         self.stop_fixation_loss = self.cls_config.getfloat('para', 'stop_fixation_loss')
 
         self.stop_movement_profit = self.cls_config.getfloat('para', 'stop_movement_profit')
-        
 
         return
-
 
     def init_strategy(self):
         """
@@ -191,13 +195,12 @@ class AR_MA_STOCK(StrategyBase):
         self.init_entry_high_low()
         return
 
-
     def init_data(self):
         """
         功能：获取订阅代码的初始化数据
         """
         for ticker in self.cls_stock_pool:
-            #初始化开仓操作信号字典
+            # 初始化开仓操作信号字典
             self.dict_open_close_signal.setdefault(ticker, False)
 
             daily_bars = self.get_last_n_dailybars(ticker, self.hist_size - 1, self.cur_date)
@@ -212,112 +215,114 @@ class AR_MA_STOCK(StrategyBase):
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
-            open_ls = [data.open * data.adj_factor/end_adj_factor for data in daily_bars]
+            open_ls = [data.open * data.adj_factor / end_adj_factor for data in daily_bars]
             open_ls.reverse()
-            high_ls = [data.high * data.adj_factor/end_adj_factor for data in daily_bars]
+            high_ls = [data.high * data.adj_factor / end_adj_factor for data in daily_bars]
             high_ls.reverse()
-            low_ls = [data.low * data.adj_factor/end_adj_factor for data in daily_bars]
+            low_ls = [data.low * data.adj_factor / end_adj_factor for data in daily_bars]
             low_ls.reverse()
-            cp_ls = [data.close * data.adj_factor/end_adj_factor for data in daily_bars]
+            cp_ls = [data.close * data.adj_factor / end_adj_factor for data in daily_bars]
             cp_ls.reverse()
 
-
-            #留出一个空位存储当天的一笔数据
+            # 留出一个空位存储当天的一笔数据
             open_ls.append(INIT_OPEN_PRICE)
-            open = np.asarray(open_ls, dtype= np.float)
+            open = np.asarray(open_ls, dtype=np.float)
             high_ls.append(INIT_HIGH_PRICE)
-            high = np.asarray(high_ls, dtype = np.float)
+            high = np.asarray(high_ls, dtype=np.float)
             low_ls.append(INIT_LOW_PRICE)
-            low = np.asarray(low_ls, dtype = np.float)
+            low = np.asarray(low_ls, dtype=np.float)
             cp_ls.append(INIT_CLOSE_PRICE)
-            close = np.asarray(cp_ls, dtype = np.float)
+            close = np.asarray(cp_ls, dtype=np.float)
 
+            # 存储历史的open high low close
+            self.dict_price.setdefault(ticker, [open, high, low, close])
 
-            #存储历史的open high low close
-            self.dict_price.setdefault( ticker, [open, high, low, close])
-
-
-
-    def init_data_newday( self ):
+    def init_data_newday(self):
         """
         功能：新的一天初始化数据
         """
-        #新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
+        # 新的一天，去掉第一笔数据,并留出一个空位存储当天的一笔数据
         for key in self.dict_price:
             if len(self.dict_price[key][0]) >= self.hist_size and self.dict_price[key][0][-1] - INIT_OPEN_PRICE > EPS:
                 self.dict_price[key][0] = np.append(self.dict_price[key][0][1:], INIT_OPEN_PRICE)
             elif len(self.dict_price[key][0]) < self.hist_size and self.dict_price[key][0][-1] - INIT_OPEN_PRICE > EPS:
-                #未取足指标所需全部历史数据时回测过程中补充数据
+                # 未取足指标所需全部历史数据时回测过程中补充数据
                 self.dict_price[key][0] = np.append(self.dict_price[key][0][:], INIT_HIGH_PRICE)
 
-            if len(self.dict_price[key][1]) >= self.hist_size and abs(self.dict_price[key][1][-1] - INIT_HIGH_PRICE) > EPS:
+            if len(self.dict_price[key][1]) >= self.hist_size and abs(
+                            self.dict_price[key][1][-1] - INIT_HIGH_PRICE) > EPS:
                 self.dict_price[key][1] = np.append(self.dict_price[key][1][1:], INIT_HIGH_PRICE)
-            elif len(self.dict_price[key][1]) < self.hist_size and abs(self.dict_price[key][1][-1] - INIT_HIGH_PRICE) > EPS:
+            elif len(self.dict_price[key][1]) < self.hist_size and abs(
+                            self.dict_price[key][1][-1] - INIT_HIGH_PRICE) > EPS:
                 self.dict_price[key][1] = np.append(self.dict_price[key][1][:], INIT_HIGH_PRICE)
 
-            if len(self.dict_price[key][2]) >= self.hist_size and abs(self.dict_price[key][2][-1] - INIT_LOW_PRICE) > EPS:
+            if len(self.dict_price[key][2]) >= self.hist_size and abs(
+                            self.dict_price[key][2][-1] - INIT_LOW_PRICE) > EPS:
                 self.dict_price[key][2] = np.append(self.dict_price[key][2][1:], INIT_LOW_PRICE)
-            elif len(self.dict_price[key][2]) < self.hist_size and abs(self.dict_price[key][2][-1] - INIT_LOW_PRICE) > EPS:
+            elif len(self.dict_price[key][2]) < self.hist_size and abs(
+                            self.dict_price[key][2][-1] - INIT_LOW_PRICE) > EPS:
                 self.dict_price[key][2] = np.append(self.dict_price[key][2][:], INIT_LOW_PRICE)
 
-            if len(self.dict_price[key][3]) >= self.hist_size and abs(self.dict_price[key][3][-1] - INIT_CLOSE_PRICE) > EPS:
+            if len(self.dict_price[key][3]) >= self.hist_size and abs(
+                            self.dict_price[key][3][-1] - INIT_CLOSE_PRICE) > EPS:
                 self.dict_price[key][3] = np.append(self.dict_price[key][3][1:], INIT_CLOSE_PRICE)
-            elif len(self.dict_price[key][3]) < self.hist_size and abs(self.dict_price[key][3][-1] - INIT_CLOSE_PRICE) > EPS:
+            elif len(self.dict_price[key][3]) < self.hist_size and abs(
+                            self.dict_price[key][3][-1] - INIT_CLOSE_PRICE) > EPS:
                 self.dict_price[key][3] = np.append(self.dict_price[key][3][:], INIT_CLOSE_PRICE)
 
-
-        #初始化开仓操作信号字典
+        # 初始化开仓操作信号字典
         for key in self.dict_open_close_signal:
             self.dict_open_close_signal[key] = False
 
-	#开仓后到当前的交易日天数
-	keys = list(self.dict_open_cum_days.keys())
-	for key in keys:
-	    if self.dict_open_cum_days[key] >= self.open_max_days:
-		del self.dict_open_cum_days[key]
-	    else:
-		self.dict_open_cum_days[key] += 1	
-	    
+        # 开仓后到当前的交易日天数
+        keys = list(self.dict_open_cum_days.keys())
+        for key in keys:
+            if self.dict_open_cum_days[key] >= self.open_max_days:
+                del self.dict_open_cum_days[key]
+            else:
+                self.dict_open_cum_days[key] += 1
+
     def cal_ar_index(self, ticker):
         """
         功能：计算ar指标
         """
         ar_index = None
 
-        if (len(self.dict_price[ticker][0]) < self.ar_period or abs(self.dict_price[ticker][0][-1] - INIT_OPEN_PRICE) < EPS) \
-                or (len(self.dict_price[ticker][1]) < self.ar_period or abs(self.dict_price[ticker][1][-1] - INIT_HIGH_PRICE) < EPS) \
-                or (len(self.dict_price[ticker][2]) < self.ar_period or abs(self.dict_price[ticker][2][-1] - INIT_LOW_PRICE) < EPS) \
-                or (len(self.dict_price[ticker][3]) < self.ar_period or abs(self.dict_price[ticker][3][-1] - INIT_CLOSE_PRICE) < EPS):
-            #历史数据不足
+        if (len(self.dict_price[ticker][0]) < self.ar_period or abs(
+                    self.dict_price[ticker][0][-1] - INIT_OPEN_PRICE) < EPS) \
+                or (len(self.dict_price[ticker][1]) < self.ar_period or abs(
+                        self.dict_price[ticker][1][-1] - INIT_HIGH_PRICE) < EPS) \
+                or (len(self.dict_price[ticker][2]) < self.ar_period or abs(
+                        self.dict_price[ticker][2][-1] - INIT_LOW_PRICE) < EPS) \
+                or (len(self.dict_price[ticker][3]) < self.ar_period or abs(
+                        self.dict_price[ticker][3][-1] - INIT_CLOSE_PRICE) < EPS):
+            # 历史数据不足
             return ar_index
 
-        open_ls = self.dict_price[ticker][0][len(self.dict_price[ticker][0])-self.ar_period:]
-        high_ls = self.dict_price[ticker][1][len(self.dict_price[ticker][1])-self.ar_period:]
-        low_ls = self.dict_price[ticker][2][len(self.dict_price[ticker][2])-self.ar_period:]
+        open_ls = self.dict_price[ticker][0][len(self.dict_price[ticker][0]) - self.ar_period:]
+        high_ls = self.dict_price[ticker][1][len(self.dict_price[ticker][1]) - self.ar_period:]
+        low_ls = self.dict_price[ticker][2][len(self.dict_price[ticker][2]) - self.ar_period:]
 
-        high_minus_ls = map(lambda (a, b):a-b, zip(high_ls, open_ls))
-        low_minus_ls = map(lambda (a, b):a-b, zip(open_ls, low_ls))
+        high_minus_ls = map(lambda (a, b): a - b, zip(high_ls, open_ls))
+        low_minus_ls = map(lambda (a, b): a - b, zip(open_ls, low_ls))
 
         ar_index = 0.0
         for pos in range(len(high_minus_ls)):
             if low_minus_ls[pos] > EPS:
-                ar_index+= high_minus_ls[pos]/low_minus_ls[pos]
+                ar_index += high_minus_ls[pos] / low_minus_ls[pos]
 
         return ar_index
-
 
     def get_last_factor(self):
         """
         功能：获取指定日期最新的复权因子
         """
         for ticker in self.cls_stock_pool:
-            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date )
+            daily_bars = self.get_last_n_dailybars(ticker, 1, self.end_date)
             if daily_bars is not None and len(daily_bars) > 0:
                 self.dict_last_factor.setdefault(ticker, daily_bars[0].adj_factor)
 
-
-
-    def init_entry_high_low( self ):
+    def init_entry_high_low(self):
         """
         功能：获取进场后的最高价和最低价,仿真或实盘交易启动时加载
         """
@@ -326,7 +331,7 @@ class AR_MA_STOCK(StrategyBase):
         low_list = []
         for pos in pos_list:
             symbol = pos.exchange + '.' + pos.sec_id
-            init_time = self.utc_strtime( pos.init_time)
+            init_time = self.utc_strtime(pos.init_time)
 
             cur_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -335,35 +340,34 @@ class AR_MA_STOCK(StrategyBase):
             high_list = [bar.high for bar in daily_bars]
             low_list = [bar.low for bar in daily_bars]
 
-            if len( high_list ) > 0:
-                highest = np.max( high_list )
+            if len(high_list) > 0:
+                highest = np.max(high_list)
             else:
                 highest = pos.vwap
 
-            if len( low_list ) > 0:
-                lowest = np.min( low_list)
+            if len(low_list) > 0:
+                lowest = np.min(low_list)
             else:
                 lowest = pos.vwap
 
-            self.dict_entry_high_low.setdefault(symbol, [highest, lowest] )
-
+            self.dict_entry_high_low.setdefault(symbol, [highest, lowest])
 
     def on_bar(self, bar):
         if self.cls_mode == gm.MD_MODE_PLAYBACK:
             if bar.strtime[0:10] != self.cur_date[0:10]:
                 self.cur_date = bar.strtime[0:10] + ' 08:00:00'
-                #新的交易日
+                # 新的交易日
                 self.init_data_newday()
 
-        symbol = bar.exchange + '.'+ bar.sec_id
+        symbol = bar.exchange + '.' + bar.sec_id
 
         self.movement_stop_profit_loss(bar)
         self.fixation_stop_profit_loss(bar)
 
-        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid )
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
-        #补充当天价格
-        if self.dict_price.has_key( symbol ):
+        # 补充当天价格
+        if self.dict_price.has_key(symbol):
             self.dict_price[symbol][0][-1] = bar.open
 
             if self.dict_price[symbol][1][-1] < bar.high:
@@ -375,42 +379,43 @@ class AR_MA_STOCK(StrategyBase):
             self.dict_price[symbol][3][-1] = bar.close
 
         if self.dict_open_close_signal[symbol] is False:
-            #当天未有对该代码开、平仓
-            if self.dict_price.has_key( symbol ):
+            # 当天未有对该代码开、平仓
+            if self.dict_price.has_key(symbol):
 
-                ma_short = talib.MA( self.dict_price[symbol][3], self.short_period)
-                ma_mid = talib.MA( self.dict_price[symbol][3], self.mid_period)
-                ma_long = talib.MA( self.dict_price[symbol][3], self.long_period)
+                ma_short = talib.MA(self.dict_price[symbol][3], self.short_period)
+                ma_mid = talib.MA(self.dict_price[symbol][3], self.mid_period)
+                ma_long = talib.MA(self.dict_price[symbol][3], self.long_period)
 
-                ar_index = self.cal_ar_index( symbol )
+                ar_index = self.cal_ar_index(symbol)
                 if ar_index is not None:
                     if pos is None and symbol not in self.dict_open_cum_days \
-						and (ar_index < self.ar_dwn and (ma_short[-1] > ma_mid[-1] and ma_mid[-1] > ma_long[-1])):
-			#有开仓机会则设置已开仓的交易天数
-			self.dict_open_cum_days[symbol] = 0
-		    
-			cash = self.get_cash()
-			cur_open_vol = self.open_vol
-			if cash.available/bar.close > self.open_vol:
-			    cur_open_vol = self.open_vol
-			else :
-			    cur_open_vol = int(cash.available/bar.close/100)*100
-		    
-			if cur_open_vol == 0:
-			    print 'no available cash to buy, available cash: %.2f'%cash.available
-			else:
-			    self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
-			    self.dict_open_close_signal[symbol] = True
-			    logging.info('open long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-                    elif pos is not None and (ar_index > self.ar_upr and (ma_short[-1] < ma_mid[-1] and ma_mid[-1] < ma_long[-1])):
-			vol = pos.volume - pos.volume_today
-			if vol > 0 :
-			    self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
-			    self.dict_open_close_signal[symbol] = True
-			    logging.info( 'close long, symbol:%s, time:%s, price:%.2f'%(symbol, bar.strtime, bar.close) )
-			    #print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
-        
-        
+                            and (ar_index < self.ar_dwn and (ma_short[-1] > ma_mid[-1] and ma_mid[-1] > ma_long[-1])):
+                        # 有开仓机会则设置已开仓的交易天数
+                        self.dict_open_cum_days[symbol] = 0
+
+                        cash = self.get_cash()
+                        cur_open_vol = self.open_vol
+                        if cash.available / bar.close > self.open_vol:
+                            cur_open_vol = self.open_vol
+                        else:
+                            cur_open_vol = int(cash.available / bar.close / 100) * 100
+
+                        if cur_open_vol == 0:
+                            print 'no available cash to buy, available cash: %.2f' % cash.available
+                        else:
+                            self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
+                            self.dict_open_close_signal[symbol] = True
+                            logging.info('open long, symbol:%s, time:%s, price:%.2f' % (symbol, bar.strtime, bar.close))
+                    elif pos is not None and (
+                            ar_index > self.ar_upr and (ma_short[-1] < ma_mid[-1] and ma_mid[-1] < ma_long[-1])):
+                        vol = pos.volume - pos.volume_today
+                        if vol > 0:
+                            self.close_long(bar.exchange, bar.sec_id, bar.close, vol)
+                            self.dict_open_close_signal[symbol] = True
+                            logging.info(
+                                'close long, symbol:%s, time:%s, price:%.2f' % (symbol, bar.strtime, bar.close))
+                            # print 'close long, symbol:%s, time:%s '%(symbol, bar.strtime)
+
     def on_order_filled(self, order):
         symbol = order.exchange + '.' + order.sec_id
         if order.position_effect == PositionEffect_CloseYesterday \
@@ -419,101 +424,114 @@ class AR_MA_STOCK(StrategyBase):
             if pos is None and self.is_movement_stop == 1:
                 self.dict_entry_high_low.pop(symbol)
 
-
     def fixation_stop_profit_loss(self, bar):
-	"""
-	功能：固定止盈、止损,盈利或亏损超过了设置的比率则执行止盈、止损
-	"""
-	if self.is_fixation_stop == 0:
-	    return
+        """
+        功能：固定止盈、止损,盈利或亏损超过了设置的比率则执行止盈、止损
+        """
+        if self.is_fixation_stop == 0:
+            return
 
-	symbol = bar.exchange + '.' + bar.sec_id 
-	pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
-	if pos is not None:
-	    if pos.fpnl > 0 and pos.fpnl/pos.cost >= self.stop_fixation_profit:
-		    self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-		    self.dict_open_close_signal[symbol]=True
-		    logging.info('fixnation stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap: %s, volume:%s'%(symbol,
-		                                     bar.strtime, bar.close, pos.vwap, pos.volume) )   
-	    elif pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_loss:
-		    self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-		    self.dict_open_close_signal[symbol]=True
-		    logging.info('fixnation stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%s, volume:%s'%(symbol,
-		                                      bar.strtime, bar.close, pos.vwap, pos.volume))
-
+        symbol = bar.exchange + '.' + bar.sec_id
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
+        if pos is not None:
+            if pos.fpnl > 0 and pos.fpnl / pos.cost >= self.stop_fixation_profit:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                self.dict_open_close_signal[symbol] = True
+                logging.info(
+                    'fixnation stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap: %s, volume:%s' % (symbol,
+                                                                                                                bar.strtime,
+                                                                                                                bar.close,
+                                                                                                                pos.vwap,
+                                                                                                                pos.volume))
+            elif pos.fpnl < 0 and pos.fpnl / pos.cost <= -1 * self.stop_fixation_loss:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                self.dict_open_close_signal[symbol] = True
+                logging.info(
+                    'fixnation stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%s, volume:%s' % (symbol,
+                                                                                                             bar.strtime,
+                                                                                                             bar.close,
+                                                                                                             pos.vwap,
+                                                                                                             pos.volume))
 
     def movement_stop_profit_loss(self, bar):
-	"""
-	功能：移动止盈, 移动止盈止损按进场后的最高价乘以设置的比率与当前价格相比，
-	      并且盈利比率达到设定的盈亏比率时，执行止盈
-	"""
-	if self.is_movement_stop == 0:
-	    return 
+        """
+        功能：移动止盈, 移动止盈止损按进场后的最高价乘以设置的比率与当前价格相比，
+              并且盈利比率达到设定的盈亏比率时，执行止盈
+        """
+        if self.is_movement_stop == 0:
+            return
 
-	entry_high = None
-	entry_low = None
-	pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
-	symbol = bar.exchange + '.' + bar.sec_id
+        entry_high = None
+        entry_low = None
+        pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
+        symbol = bar.exchange + '.' + bar.sec_id
 
-	is_stop_profit = True
+        is_stop_profit = True
 
-	if pos is not None and pos.volume > 0:
-	    if self.dict_entry_high_low.has_key( symbol):
-		if self.dict_entry_high_low[symbol][0] < bar.close:
-		    self.dict_entry_high_low[symbol][0] = bar.close
-		    is_stop_profit = False
-		if self.dict_entry_high_low[symbol][1] > bar.close:
-		    self.dict_entry_high_low[symbol][1] = bar.close
-		[entry_high, entry_low] = self.dict_entry_high_low[symbol]
+        if pos is not None and pos.volume > 0:
+            if self.dict_entry_high_low.has_key(symbol):
+                if self.dict_entry_high_low[symbol][0] < bar.close:
+                    self.dict_entry_high_low[symbol][0] = bar.close
+                    is_stop_profit = False
+                if self.dict_entry_high_low[symbol][1] > bar.close:
+                    self.dict_entry_high_low[symbol][1] = bar.close
+                [entry_high, entry_low] = self.dict_entry_high_low[symbol]
 
-	    else:
-		self.dict_entry_high_low.setdefault(symbol, [bar.close, bar.close])
-		[entry_high, entry_low] = self.dict_entry_high_low[symbol]   
-		is_stop_profit = False
+            else:
+                self.dict_entry_high_low.setdefault(symbol, [bar.close, bar.close])
+                [entry_high, entry_low] = self.dict_entry_high_low[symbol]
+                is_stop_profit = False
 
-	    if is_stop_profit:
-		#移动止盈
-		if bar.close <= (1 - self.stop_movement_profit) * entry_high and pos.fpnl/pos.cost >= self.stop_fixation_profit:
-		    if pos.volume - pos.volume_today > 0:
-			self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-			self.dict_open_close_signal[symbol] = True
-			logging.info('movement stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s'%(symbol, 
-			                                                                                                       bar.strtime, bar.close, pos.vwap, pos.volume) )   
+            if is_stop_profit:
+                # 移动止盈
+                if bar.close <= (
+                    1 - self.stop_movement_profit) * entry_high and pos.fpnl / pos.cost >= self.stop_fixation_profit:
+                    if pos.volume - pos.volume_today > 0:
+                        self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                        self.dict_open_close_signal[symbol] = True
+                        logging.info(
+                            'movement stop profit: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s' % (
+                            symbol,
+                            bar.strtime, bar.close, pos.vwap, pos.volume))
 
-	    #止损
-	    if pos.fpnl < 0 and pos.fpnl/pos.cost <= -1 * self.stop_fixation_loss:
-		self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
-		self.dict_open_close_signal[symbol]=True
-		logging.info('movement stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s'%(symbol, 
-		                                                                                                     bar.strtime, bar.close, pos.vwap, pos.volume))            
-                   
+                        # 止损
+            if pos.fpnl < 0 and pos.fpnl / pos.cost <= -1 * self.stop_fixation_loss:
+                self.close_long(bar.exchange, bar.sec_id, 0, pos.volume - pos.volume_today)
+                self.dict_open_close_signal[symbol] = True
+                logging.info(
+                    'movement stop loss: close long, symbol:%s, time:%s, price:%.2f, vwap:%.2f, volume:%s' % (symbol,
+                                                                                                              bar.strtime,
+                                                                                                              bar.close,
+                                                                                                              pos.vwap,
+                                                                                                              pos.volume))
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     print get_version()
     logging.config.fileConfig('ar_ma_stock.ini')
     AR_MA_STOCK.read_ini('ar_ma_stock.ini')
     AR_MA_STOCK.get_strategy_conf()
 
-    ar_ma_stock = AR_MA_STOCK( username = AR_MA_STOCK.cls_user_name,
-                               password = AR_MA_STOCK.cls_password,
-                               strategy_id = AR_MA_STOCK.cls_strategy_id,
-                               subscribe_symbols = AR_MA_STOCK.cls_subscribe_symbols,
-                               mode = AR_MA_STOCK.cls_mode,
-                               td_addr = AR_MA_STOCK.cls_td_addr)
+    ar_ma_stock = AR_MA_STOCK(username=AR_MA_STOCK.cls_user_name,
+                              password=AR_MA_STOCK.cls_password,
+                              strategy_id=AR_MA_STOCK.cls_strategy_id,
+                              subscribe_symbols=AR_MA_STOCK.cls_subscribe_symbols,
+                              mode=AR_MA_STOCK.cls_mode,
+                              td_addr=AR_MA_STOCK.cls_td_addr)
 
     if AR_MA_STOCK.cls_mode == gm.MD_MODE_PLAYBACK:
         AR_MA_STOCK.get_backtest_conf()
-        ret = ar_ma_stock.backtest_config(start_time = AR_MA_STOCK.cls_backtest_start ,
-                                          end_time = AR_MA_STOCK.cls_backtest_end,
-                                          initial_cash = AR_MA_STOCK.cls_initial_cash,
-                                          transaction_ratio = AR_MA_STOCK.cls_transaction_ratio,
-                                          commission_ratio = AR_MA_STOCK.cls_commission_ratio,
-                                          slippage_ratio= AR_MA_STOCK.cls_slippage_ratio,
-                                          price_type= AR_MA_STOCK.cls_price_type,
-                                          bench_symbol= AR_MA_STOCK.cls_bench_symbol )
+        ret = ar_ma_stock.backtest_config(start_time=AR_MA_STOCK.cls_backtest_start,
+                                          end_time=AR_MA_STOCK.cls_backtest_end,
+                                          initial_cash=AR_MA_STOCK.cls_initial_cash,
+                                          transaction_ratio=AR_MA_STOCK.cls_transaction_ratio,
+                                          commission_ratio=AR_MA_STOCK.cls_commission_ratio,
+                                          slippage_ratio=AR_MA_STOCK.cls_slippage_ratio,
+                                          price_type=AR_MA_STOCK.cls_price_type,
+                                          bench_symbol=AR_MA_STOCK.cls_bench_symbol)
 
     ar_ma_stock.get_para_conf()
     ar_ma_stock.init_strategy()
     ret = ar_ma_stock.run()
 
-    print 'run result %s'%ret
+print 'run result %s' % ret
