@@ -101,5 +101,4 @@ if __name__ == '__main__':
     # 策略进入运行，等待数据事件
     ret = ma.run()
     # 打印策略退出状态
-    print("MA :", ma.get_strerror(ret))
-
+print("MA :", ma.get_strerror(ret))

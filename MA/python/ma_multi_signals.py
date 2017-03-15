@@ -32,15 +32,15 @@ class MA(StrategyBase):
         self.trade_unit = [3, 1, 2, 0]
         self.trade_count = 0
         self.trade_limit = len(self.trade_unit)
-        self.window_size = self.config.getint('para', 'window_size') or 60
-        self.timeperiod = self.config.getint('para', 'timeperiod') or 60
-        self.bar_type = self.config.getint('para', 'bar_type') or 15
+        self.window_size = self.config.getint('para', 'window_size') or 200
+        self.timeperiod = self.config.getint('para', 'timeperiod') or 20
+        self.bar_type = self.config.getint('para', 'bar_type') or 60
         self.close_buffer = deque(maxlen=self.window_size)
         self.significant_diff = self.config.getfloat('para', 'significant_diff') or significant_diff
 
         # prepare historical bars for MA calculating
         # 从数据服务中准备一段历史数据，使得收到第一个bar后就可以按需要计算ma
-        last_closes = [bar.close for bar in self.get_last_n_bars(self.symbol, self.bar_type, self.window_size)]
+        last_closes = [bar.close for bar in self.get_last_n_bars(self.symbol, self.bar_type, self.window_size,end_time=self.start_time)]
         last_closes.reverse()     #因为查询出来的时间是倒序排列，需要倒一下顺序
         self.close_buffer.extend(last_closes)
 
@@ -82,7 +82,7 @@ class MA(StrategyBase):
                 a_p.volume if a_p else 0.0,
                 round(a_p.vwap,2) if a_p else 0.0)))
 
-        if cross < 0 and delta > threshold and momentum >= significant_diff:        ## 收盘价上穿均线，且当前价格偏离满足门限过滤条件，多信号
+        if cross  and delta > threshold and momentum >= significant_diff:        ## 收盘价上穿均线，且当前价格偏离满足门限过滤条件，多信号
             # 没有空仓，开多，或者是有多仓且没有超出下单次数限制，继续加多
             if (a_p is None or a_p.volume < eps) or (b_p and self.trade_count < self.trade_limit):
                 # 依次获取下单的交易量，下单量是配置的一个整数数列，用于仓位管理，可用配置文件中设置
@@ -96,7 +96,7 @@ class MA(StrategyBase):
                 if a_p and a_p.volume > eps:
                     self.close_short(self.exchange, self.sec_id, self.last_price, a_p.volume)
                     self.trade_count = 0
-        elif cross < 0 and delta < -threshold and momentum <= - significant_diff:     ## bar 收盘价下穿ma均线，且偏离满足信号过滤条件
+        elif cross  and delta < -threshold and momentum <= - significant_diff:     ## bar 收盘价下穿ma均线，且偏离满足信号过滤条件
             # 没有多仓时，开空, 或者是有空仓时，且没超出交易次数限制，继续加空
             if (b_p is None or b_p.volume < eps) or (a_p and self.trade_count < self.trade_limit):
                 vol = self.trade_unit[self.trade_count]
@@ -122,5 +122,4 @@ if __name__ == '__main__':
     # 策略进入运行，等待数据事件
     ret = ma.run()
     # 打印策略退出状态
-    print("MA :", ma.get_strerror(ret))
-
+print("MA :", ma.get_strerror(ret))
