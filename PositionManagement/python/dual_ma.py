@@ -470,10 +470,10 @@ class DualMA(StrategyBase):
 
 
 if __name__ == '__main__':
-    ini_file = sys.argv[1] if len(sys.argv) > 1 else 'strategy_dual_ma.ini'
+    ini_file = sys.argv[1] if len(sys.argv) > 1 else 'dual_ma.ini'
     logging.config.fileConfig(ini_file)
     dm = DualMA(config_file=ini_file)
     dm.logger.info("Strategy info : %s" % (dm.__dict__))
     dm.logger.info("Strategy dual ma ready, waiting for data ...")
     ret = dm.run()
-    dm.logger.info("DualMA message %s" % (dm.get_strerror(ret)))
+dm.logger.info("DualMA message %s" % (dm.get_strerror(ret)))
