@@ -150,7 +150,7 @@ class AR_MA_STOCK(StrategyBase):
 
     def get_para_conf(self):
         """
-        功能：   读取策略配置文件para(自定义参数)段落的值
+        功能：读取策略配置文件para(自定义参数)段落的值
         """
         if self.cls_config is None:
             return
