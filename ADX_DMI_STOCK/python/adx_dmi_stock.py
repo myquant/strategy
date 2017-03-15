@@ -73,7 +73,7 @@ class ADX_DMI_STOCK(StrategyBase):
         cls.cls_subscribe_symbols = cls.cls_config.get('strategy', 'subscribe_symbols')
         cls.cls_mode = cls.cls_config.getint('strategy', 'mode')
         cls.cls_td_addr = cls.cls_config.get('strategy', 'td_addr')
-        if len(cls.cls_subscribe_symbols) <=0 :
+        if len(cls.cls_subscribe_symbols) <=0 :#
             cls.get_subscribe_stock()
         else :
             subscribe_ls = cls.cls_subscribe_symbols.split(',')
