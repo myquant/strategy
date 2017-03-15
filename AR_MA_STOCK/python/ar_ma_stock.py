@@ -274,7 +274,7 @@ class AR_MA_STOCK(StrategyBase):
         for key in self.dict_open_close_signal:
             self.dict_open_close_signal[key] = False
 
-        # 开仓后到当前的交易日天数
+        #  开仓后到当前的交易日天数
         keys = list(self.dict_open_cum_days.keys())
         for key in keys:
             if self.dict_open_cum_days[key] >= self.open_max_days:
