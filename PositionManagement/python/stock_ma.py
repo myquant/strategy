@@ -12,7 +12,24 @@ from collections import deque
 from gmsdk import *
 
 import threading
-
+'''
+本策略是一个基本的套利策略的程序框架，仅供策略编程参考。
+类型：套利策略示例
+策略在过去经验的统计验证基础上，认为两个代码间的价格比值符合统计稳定规律，如果价差超出某一阀值后，存在套利机会。
+代码中用lna - lnb 来表示的价格比。
+交易规则：
+监测lna - lnb
+    如果大于0:
+        如果价格比值超出设定阀值，且低于止损阀值，空a多b；
+        如果超出止损阀值，平空a,平多b;
+    如果小于0:
+        如果小于负的设定阀值，且高于负的止损阀值，多a空b；
+        如果小于负的止损阀值，平多a,平空b；
+    在价格比接近于1时，认为回归，平掉套利仓位
+    防止单腿成交： 在check_positions中，判断如果4个tick数据（每只代码各2个tick更新）后，仍然只有单腿成交，则平掉单腿仓位。
+注：只是一个示例套利的程序框架，实际应用中需要按照具体情况修改。
+用同类品种跨期的价格差，可以直接用两者之间的价格相减。
+'''
 eps = 1e-6
 
 class DualMA(StrategyBase):
@@ -45,17 +62,17 @@ class DualMA(StrategyBase):
         ## trade unit list, eg. fib numbers [1,2,3,5,8] or [8, 4.0, 2.0, 1.0]
         self.trade_unit = [int(x) for x in self.config.get('para', 'trade_unit_list').split(',')]
 
-        self.cancel_ticks = self.config.getint('para', 'cancel_ticks') or 10
+        self.cancel_ticks = self.config.getint('para', 'cancel_ticks') or 20
         self.trade_limit = self.config.getint('para', 'trade_limit')
         self.trade_limit = min(self.trade_limit, len(self.trade_unit))
         self.positive_stop = self.config.getboolean('para', 'positive_stop') or 0
         self.hops = self.config.getint('para', 'hops') or 1
-        self.momentum_factor = self.config.getfloat('para', 'momentum_factor') or 1.1
-        self.window_size = self.config.getint('para', 'window_size') or 20
+        self.momentum_factor = self.config.getfloat('para', 'momentum_factor') or 1.07
+        self.window_size = self.config.getint('para', 'window_size') or 300
         self.short_timeperiod = self.config.getint('para', 'short_timeperiod') or 5
-        self.long_timeperiod = self.config.getint('para', 'long_timeperiod') or 10
-        self.life_timeperiod = self.config.getint('para', 'life_timeperiod') or 30
-        self.bar_type = self.config.getint('para', 'bar_type') or 15
+        self.long_timeperiod = self.config.getint('para', 'long_timeperiod') or 9
+        self.life_timeperiod = self.config.getint('para', 'life_timeperiod') or 15
+        self.bar_type = self.config.getint('para', 'bar_type') or 60
         self.close_buffer = deque(maxlen=self.window_size)
         # prepare historical bars for MA calculating
         last_closes = [bar.close for bar in self.get_last_n_bars(self.symbol, self.bar_type, self.window_size)]
@@ -358,4 +375,4 @@ if __name__ == '__main__':
     dm.logger.info("Strategy info : %s" % (dm.__dict__))
     dm.logger.info("Strategy dual ma ready, waiting for data ...")
     ret = dm.run()
-    dm.logger.info("DualMA message %s" % (dm.get_strerror(ret)))
+dm.logger.info("DualMA message %s" % (dm.get_strerror(ret)))

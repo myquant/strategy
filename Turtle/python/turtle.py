@@ -16,7 +16,7 @@ class TurtleStrategy(StrategyBase):
     def __get_param__(self):
         self.csv_file = self.config.get('para', 'csv_file')
         self.period = self.config.getint('para', 'period')
-        self.hop = self.config.get('para', 'hop') or 0
+        self.hop = self.config.get('para', 'hop') or 0.1
 
     def __init_data__(self):
         '''
@@ -36,27 +36,20 @@ class TurtleStrategy(StrategyBase):
             buy_amount = r[1][2]
             t = "{0}.{1}".format(exchange, sec_id)
 
+
+
             hl = self.get_highest_lowest_price(t)
+            #print (hl)
             self.hist_data[t] = hl + (buy_amount,)   ## high, low, buy_amount
+
 
             self.sec_ids.append("{0}".format(sec_id))
             subscribe_symbols.append(t + ".tick")
 
-        ## subscribe
         self.subscribe(",".join(subscribe_symbols))
 
-        ps = self.get_positions()
-        for p in ps:
-            sym = ".".join([p.exchange, p.sec_id])
-            self.positions[sym] = p
-
-            ## if not in stock list, close long position
-            if p.sec_id not in self.sec_ids:
-                self.close_long(p.exchange, p.sec_id, 0, p.volume)
-
-
     def get_highest_lowest_price(self, symbol):
-        print(symbol)
+        #print(symbol)
         ## get last N dailybars
         hd = self.get_last_n_dailybars(symbol, self.period)
 
@@ -70,27 +63,49 @@ class TurtleStrategy(StrategyBase):
 
 
     def on_tick(self, tick):
-        if not tick.sec_id in self.sec_ids:
-            self.logger.info( "received tick: %s %s %s %s" % (tick.exchange, tick.sec_id, round(tick.last_price,2), tick.last_volume))
-        else:
-            self.logger.info( "received tick: %s %s, A: %s B: %s" % (tick.sec_id, round(tick.last_price,2), round(tick.asks[0][0],2), round(tick.bids[0][0],2)))
-            symbol = ".".join([tick.exchange, tick.sec_id])
-            data = self.hist_data.get(symbol)
 
-            if data and tick.last_price > data[0]:  ## check high
+        if not tick.sec_id in self.sec_ids:
+            pass
+            #self.logger.info( "received tick: %s %s %s %s" % (tick.exchange, tick.sec_id, round(tick.last_price,2), tick.last_volume))
+        else:
+            #self.logger.info( "received tick: %s %s, A: %s B: %s" % (tick.sec_id, round(tick.last_price,2), round(tick.asks[0][0],2), round(tick.bids[0][0],2)))
+            symbol = ".".join([tick.exchange, tick.sec_id])
+
+
+            data = self.hist_data.get(symbol)
+            self.hop = float(self.hop)
+            #print (data)
+            pa = self.get_positions()
+            #int pa
+
+
+
+            if data and tick.last_price > data[0]  :  ## check high
                 volume = int(data[2]/(tick.last_price+self.hop)/100)*100  ## get slots, then shares
-                self.open_long(tick.exchange, tick.sec_id, tick.last_price + self.hop, volume)
-            if data and tick.last_price < data[1]:  ## check low
+                if bool(self.get_position(tick.exchange,tick.sec_id,1)) == 0:
+                #print (to_dict(aaa[0]))
+                    self.open_long(tick.exchange, tick.sec_id, tick.last_price + self.hop, volume)
+                #print (tick.exchange, tick.sec_id, tick.last_price + self.hop, volume)
+
+                #print (tick.sec_id)
+            elif data and tick.last_price < data[1]:  ## check low
+
                 #p = self.get_position(tick.exchange, tick.sec_id, OrderSide_Bid)
-                p = self.positions.get(symbol)
-                if p:
-                    self.close_long(tick.exchange, tick.sec_id, tick.last_price - self.hop, p.volume - p.volume_today)
+                ps = self.get_positions()
+                for p in ps:
+                    sym = ".".join([p.exchange, p.sec_id])
+                    self.positions[sym] = p
+                    #print (p)
+
+                    ## if not in stock list, close long position
+                    if p.sec_id in self.sec_ids:
+                        self.close_long(p.exchange, p.sec_id, 0, p.volume)
 
 
 if __name__ == '__main__':
-    ini_file = sys.argv[1] if len(sys.argv) > 1 else 'stocks_ind.ini'
+    ini_file = sys.argv[1] if len(sys.argv) > 1 else 'turtle.ini'
     logging.config.fileConfig(ini_file)
     st = TurtleStrategy(config_file=ini_file)
     st.logger.info("Strategy turtle ready, waiting for data ...")
     ret = st.run()
-    st.logger.info("Strategy turtle message %s" % st.get_strerror(ret))
+st.logger.info("Strategy turtle message %s" % st.get_strerror(ret))
