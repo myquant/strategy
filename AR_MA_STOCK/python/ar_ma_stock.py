@@ -13,7 +13,9 @@ import arrow
 from gmsdk import *
 '''
 ##人气指标（AR）介绍
+
 人气指标是以当天开市价为基础，即以当天市价分别比较当天最高、最低价，通过一定时期内开市价在股价中的地位，反映市场买卖人气。
+
 其计算公式如下：
 AR=N日内（当日最高价—当日开市价）之和 / N日内（当日开市价—当日最低价）之和
 N为公式中的设定参数，一般设定为26日。
@@ -533,5 +535,6 @@ if __name__ == '__main__':
     ar_ma_stock.get_para_conf()
     ar_ma_stock.init_strategy()
     ret = ar_ma_stock.run()
+
 
 print 'run result %s' % ret
