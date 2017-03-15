@@ -45,28 +45,8 @@ class TurtleStrategy(StrategyBase):
 
             self.sec_ids.append("{0}".format(sec_id))
             subscribe_symbols.append(t + ".tick")
-            #print (self.sec_ids)
 
-
-
-
-        ## subscribe
         self.subscribe(",".join(subscribe_symbols))
-
-        #ps = self.get_positions()
-
-        #for p in ps:
-        #    sym = ".".join([p.exchange, p.sec_id])
-         #   self.positions[sym] = p
-          #  print (p)
-
-
-            ## if not in stock list, close long position
-        #    if p.sec_id not in self.sec_ids:
-         #       self.close_long(p.exchange, p.sec_id, 0, p.volume)
-
-
-
 
     def get_highest_lowest_price(self, symbol):
         #print(symbol)
