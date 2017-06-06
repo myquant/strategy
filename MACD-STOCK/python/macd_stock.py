@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -47,7 +47,7 @@ class MACD_STOCK(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -188,7 +188,7 @@ class MACD_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -270,12 +270,12 @@ class MACD_STOCK(StrategyBase):
         self.fixation_stop_profit_loss(bar)
 
         # 填充价格
-        if self.dict_close.has_key(symbol):
+        if symbol in self.dict_close:
             self.dict_close[symbol][-1] = bar.close
 
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
-        if self.dict_close.has_key(symbol):
+        if symbol in self.dict_close:
             close = self.dict_close[symbol]
             dif, dea, macd = talib.MACD(close,
                                         fastperiod=self.short_term,
@@ -290,7 +290,7 @@ class MACD_STOCK(StrategyBase):
                     cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                 if cur_open_vol == 0:
-                    print 'no available cash to buy, available cash: %.2f' % cash.available
+                    print('no available cash to buy, available cash: %.2f' % cash.available)
                 else:
                     self.dict_openlong_signal[symbol] += 1
                     if self.dict_openlong_signal[symbol] == self.openlong_signal:
@@ -355,7 +355,7 @@ class MACD_STOCK(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -391,7 +391,7 @@ class MACD_STOCK(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     cur_date = datetime.date.today().strftime('%Y%m%d')
     log_file = 'macd_stock' + cur_date + '.log'
     logging.config.fileConfig('macd_stock.ini')
@@ -420,4 +420,4 @@ if __name__ == '__main__':
     macd_stock.init_strategy()
     ret = macd_stock.run()
 
-print 'run result %s' % ret
+print('run result %s' % ret)

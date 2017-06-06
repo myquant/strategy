@@ -58,13 +58,13 @@ class Hans123(StrategyBase):
         cur_date = utc.format('YYYY-MM-DD')
         FMT = '%s %s'
         self.today_open_time = FMT % (cur_date, self.open_time)
-        print 'today open time: %s' % self.today_open_time
+        print('today open time: %s' % self.today_open_time)
 
         self.today_hans_time = FMT % (cur_date, self.hans_time)
-        print 'today hans time: %s' % self.today_hans_time
+        print('today hans time: %s' % self.today_hans_time)
 
         today_ex_time = FMT % (cur_date, self.ex_time)
-        print 'today exit time:%s' % today_ex_time
+        print('today exit time:%s' % today_ex_time)
 
         self.ex_time_utc = arrow.get(today_ex_time).replace(tzinfo='local').timestamp
         self.hans_time_utc = arrow.get(self.today_hans_time).replace(tzinfo='local').timestamp
@@ -78,11 +78,11 @@ class Hans123(StrategyBase):
 
         # 上轨
         self.upr_band = max(close_list)
-        print 'upper band:%s' % self.upr_band
+        print('upper band:%s' % self.upr_band)
 
         # 下轨
         self.dwn_band = min(close_list)
-        print 'down band: %s' % self.dwn_band
+        print('down band: %s' % self.dwn_band)
 
     def on_tick(self, tick):
         '''
@@ -110,17 +110,17 @@ class Hans123(StrategyBase):
         if bar.utc_time > self.ex_time_utc:
             if self.long_hoding > 0:
                 self.close_long(self.exchange, self.sec_id, 0, self.long_hoding)
-                print 'exit time close long: %s, vol: %s' % (self.trade_symbol, self.long_hoding)
+                print('exit time close long: %s, vol: %s' % (self.trade_symbol, self.long_hoding))
                 self.long_hoding = 0
 
             elif self.short_hoding > 0:
                 self.close_short(self.exchange, self.sec_id, 0, self.short_hoding)
-                print 'exit time close long: %s, vol: %s' % (self.trade_symbol, self.short_hoding)
+                print('exit time close long: %s, vol: %s' % (self.trade_symbol, self.short_hoding))
                 self.short_hoding = 0
             return
 
         if self.trading_times > MAX_TRADING_TIMES:
-            print 'trading times more than max trading times, stop trading'
+            print('trading times more than max trading times, stop trading')
             return
 
         # 交易时间段
@@ -129,12 +129,12 @@ class Hans123(StrategyBase):
                 if self.short_hoding > 0:
                     # 有空仓，先平空仓
                     self.close_short(self.exchange, self.sec_id, 0, self.short_hoding)
-                    print 'close short: %s, vol:%s' % (self.trade_symbol, self.short_hoding)
+                    print('close short: %s, vol:%s' % (self.trade_symbol, self.short_hoding))
                     self.short_hoding = 0
 
                 # 开多仓
                 self.open_long(self.exchange, self.sec_id, 0, OPEN_VOL)
-                print 'open long: %s, vol:%s' % (self.trade_symbol, OPEN_VOL)
+                print('open long: %s, vol:%s' % (self.trade_symbol, OPEN_VOL))
                 self.long_hoding += OPEN_VOL
 
                 # 开仓次数+1
@@ -143,12 +143,12 @@ class Hans123(StrategyBase):
                 if self.long_hoding > 0:
                     # 有多仓，先平多仓
                     self.close_long(self.exchange, self.sec_id, 0, self.long_hoding)
-                    print 'close long: %s, vol:%s' % (self.trade_symbol, self.long_hoding)
+                    print('close long: %s, vol:%s' % (self.trade_symbol, self.long_hoding))
                     self.long_hoding = 0
 
                 # 开空仓
                 self.open_short(self.exchange, self.sec_id, 0, OPEN_VOL)
-                print 'open short: %s, vol:%s' % (self.trade_symbol, OPEN_VOL)
+                print('open short: %s, vol:%s' % (self.trade_symbol, OPEN_VOL))
                 self.short_hoding += OPEN_VOL
 
                 # 开仓次数+1
@@ -158,4 +158,4 @@ class Hans123(StrategyBase):
 if __name__ == '__main__':
     hans123 = Hans123(config_file='Hans123.ini')
     ret = hans123.run()
-print hans123.get_strerror(ret)
+print(hans123.get_strerror(ret))

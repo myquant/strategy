@@ -59,8 +59,8 @@ class R_Breaker(StrategyBase):
         end_time = self.config.get('para', 'end_time')
         et = FMT % (today.isoformat(), end_time)
         self.end_trading = arrow.get(et).replace(tzinfo='local').timestamp
-        print (begin_time,end_time)
-        print "start time %s, end time %s" % (self.begin_trading, self.end_trading)
+        print((begin_time,end_time))
+        print("start time %s, end time %s" % (self.begin_trading, self.end_trading))
 
     def __init_data(self):
         '''
@@ -82,35 +82,35 @@ class R_Breaker(StrategyBase):
 
         # 观察卖出价
         self.sell_setup = self.prev_high + self.observe_size * (self.prev_close - self.prev_low)
-        print 'sell_setup price: %s' % self.sell_setup
+        print('sell_setup price: %s' % self.sell_setup)
 
         # 反转卖出价
         self.sell_enter = (1 + self.reversal_size) / 2 * (
         self.prev_high + self.prev_low) - self.reversal_size * self.prev_low
-        print 'sell_enter price:%s' % self.sell_enter
+        print('sell_enter price:%s' % self.sell_enter)
 
         # 反转买入价
         self.buy_enter = (1 + self.reversal_size) / 2 * (
         self.prev_high + self.prev_low) - self.reversal_size * self.prev_high
-        print 'buy_enter price:%s' % self.buy_enter
+        print('buy_enter price:%s' % self.buy_enter)
 
         # 观察买入价
         self.buy_setup = self.prev_low - self.observe_size * (self.prev_high - self.prev_close)
-        print 'buy_setup:%s' % self.buy_setup
+        print('buy_setup:%s' % self.buy_setup)
 
         # 突破买入价
         self.buy_break = self.sell_setup + self.break_size * (self.sell_setup - self.buy_setup)
-        print 'buy_break:%s' % self.buy_break
+        print('buy_break:%s' % self.buy_break)
 
         # 突破卖出价
         self.sell_break = self.buy_setup + self.break_size * (self.sell_setup - self.buy_setup)
-        print 'sell_break:%s' % self.sell_break
+        print('sell_break:%s' % self.sell_break)
 
         self.bid_holding = 0.0
         position = self.get_position(self.exchange, self.sec_id, OrderSide_Bid);
         if position is not None:
             self.bid_holding = position.volume
-            print (self.bid_holding)
+            print((self.bid_holding))
 
         self.ask_holding = 0.0
         position = self.get_position(self.exchange, self.sec_id, OrderSide_Ask)
@@ -146,26 +146,26 @@ class R_Breaker(StrategyBase):
             if self.close > self.buy_break and self.bid_holding < 1:
                 # 空仓做多
                 self.open_long(self.exchange, self.sec_id, self.close, OPEN_VOL)
-                print 'open long: price %s, vol %s' % (self.close, OPEN_VOL)
+                print('open long: price %s, vol %s' % (self.close, OPEN_VOL))
             elif self.close < self.sell_break and self.ask_holding < 1:
                 # 空仓做空
                 self.open_short(self.exchange, self.sec_id, self.close, OPEN_VOL)
-                print 'open short: price %s, vol %s' % (self.close, OPEN_VOL)
+                print('open short: price %s, vol %s' % (self.close, OPEN_VOL))
             elif self.bid_holding > 0 and self.high > self.sell_setup and self.close < self.sell_enter:
                 # 多单反转
                 self.close_long(self.exchange, self.sec_id, self.close, self.bid_holding)
-                print 'close long: price %s, vol %s' % (self.close, self.bid_holding)
+                print('close long: price %s, vol %s' % (self.close, self.bid_holding))
 
                 self.open_short(self.exchange, self.sec_id, self.close, OPEN_VOL)
-                print 'Reverse open short: price %s, vol %s' % (self.close, OPEN_VOL)
+                print('Reverse open short: price %s, vol %s' % (self.close, OPEN_VOL))
 
             elif self.ask_holding > 0 and self.low < self.buy_setup and self.close > self.buy_enter:
                 # 空单反转
                 self.close_short(self.exchange, self.sec_id, self.close, self.ask_holding)
-                print 'close short: price %s, vol %s' % (self.close, self.ask_holding)
+                print('close short: price %s, vol %s' % (self.close, self.ask_holding))
 
                 self.open_long(self.exchange, self.sec_id, self.close, OPEN_VOL)
-                print 'Reverse open long: price %s, vol %s' % (self.close, OPEN_VOL)
+                print('Reverse open long: price %s, vol %s' % (self.close, OPEN_VOL))
 
         if bartime > end_trading:
             # 日内平仓
@@ -199,4 +199,4 @@ class R_Breaker(StrategyBase):
 if __name__ == '__main__':
     r_breaker = R_Breaker(config_file='R_Breaker.ini')
     ret = r_breaker.run()
-print r_breaker.get_strerror(ret)
+print(r_breaker.get_strerror(ret))

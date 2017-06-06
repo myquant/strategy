@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -49,7 +49,7 @@ class BOLL_STOCK(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -192,7 +192,7 @@ class BOLL_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -284,14 +284,14 @@ class BOLL_STOCK(StrategyBase):
         self.fixation_stop_profit_loss(bar)
 
         # 填充价格
-        if self.dict_close.has_key(symbol):
+        if symbol in self.dict_close:
             self.dict_close[symbol][-1] = bar.close
 
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
         if self.dict_open_close_signal[symbol] is False:
             # 当天未有对该代码开、平仓
-            if self.dict_close.has_key(symbol):
+            if symbol in self.dict_close:
                 upper, middle, lower = talib.BBANDS(self.dict_close[symbol], timeperiod=self.boll_period,
                                                     nbdevup=self.nbdev_up, nbdevdn=self.nbdev_down, matype=self.ma_type)
 
@@ -311,7 +311,7 @@ class BOLL_STOCK(StrategyBase):
                         cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                     if cur_open_vol == 0:
-                        print 'no available cash to buy, available cash: %.2f' % cash.available
+                        print('no available cash to buy, available cash: %.2f' % cash.available)
                     else:
                         # 上、中、下轨同时向上运行
                         self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
@@ -380,7 +380,7 @@ class BOLL_STOCK(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -418,7 +418,7 @@ class BOLL_STOCK(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     logging.config.fileConfig('boll_stock.ini')
     BOLL_STOCK.read_ini('boll_stock.ini')
     BOLL_STOCK.get_strategy_conf()
@@ -445,4 +445,4 @@ if __name__ == '__main__':
     boll_stock.init_strategy()
     ret = boll_stock.run()
 
-print 'run result %s' % ret
+print('run result %s' % ret)

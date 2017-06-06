@@ -58,10 +58,11 @@ class MA(StrategyBase):
 
     def on_execution(self, execution):
         #打印订单成交回报信息
-        print("received execution: %s" % execution.exec_type)
+        print(("received execution: %s" % execution.exec_type))
 
     #策略的算法函数，策略的交易逻辑实现部分
     def algo_action(self):
+        # type: () -> object
         #数据转换，方便调用ta-lib函数进行技术指标的计算，这里用SMA指标
         close = np.asarray(self.close_buffer)
         ma = SMA({'close':close}, timeperiod=self.timeperiod)
@@ -101,4 +102,4 @@ if __name__ == '__main__':
     # 策略进入运行，等待数据事件
     ret = ma.run()
     # 打印策略退出状态
-print("MA :", ma.get_strerror(ret))
+print(("MA :", ma.get_strerror(ret)))
