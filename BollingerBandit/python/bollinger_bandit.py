@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -50,7 +50,7 @@ class Bollinger_Bandit(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -193,7 +193,7 @@ class Bollinger_Bandit(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -296,14 +296,14 @@ class Bollinger_Bandit(StrategyBase):
         self.fixation_stop_profit_loss(bar)
 
         # 填充价格
-        if self.dict_close.has_key(symbol):
+        if symbol in self.dict_close:
             self.dict_close[symbol][-1] = bar.close
 
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
         if self.dict_open_close_signal[symbol] is False:
             # 代码持仓为空且当天未有对该代码开、平仓
-            if self.dict_close.has_key(symbol) and len(self.dict_close[symbol]) >= self.boll_bandit_period:
+            if symbol in self.dict_close and len(self.dict_close[symbol]) >= self.boll_bandit_period:
                 average_close = np.average(self.dict_close[symbol])
                 average_stddev = np.std(self.dict_close[symbol])
                 upper_band = average_close + average_stddev * self.up_ratio
@@ -327,7 +327,7 @@ class Bollinger_Bandit(StrategyBase):
                         cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                     if cur_open_vol == 0:
-                        print 'no available cash to buy, available cash: %.2f' % cash.available
+                        print('no available cash to buy, available cash: %.2f' % cash.available)
                     else:
                         # 当前价格大于roc周期的close，且上穿过了上轨
                         # 或者boll bandit周期的均价大于下轨且当前价格小于均价
@@ -414,7 +414,7 @@ class Bollinger_Bandit(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -452,7 +452,7 @@ class Bollinger_Bandit(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     logging.config.fileConfig('bollinger_bandit.ini')
     Bollinger_Bandit.read_ini('bollinger_bandit.ini')
     Bollinger_Bandit.get_strategy_conf()
@@ -479,4 +479,4 @@ if __name__ == '__main__':
     bollinger_bandit.init_strategy()
     ret = bollinger_bandit.run()
 
-print 'run result %s' % ret
+print('run result %s' % ret)

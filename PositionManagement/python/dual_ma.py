@@ -345,6 +345,7 @@ class DualMA(StrategyBase):
 
     ## 趋势信号的进出场判断，只在分时数据到来时计算
     def algo_action(self):
+        # type: () -> object
         close = np.asarray(self.close_buffer)
         if len(close) < self.life_timeperiod:
           self.logger.info('data not enough! len = {0}'.format(len(close)))

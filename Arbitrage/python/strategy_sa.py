@@ -7,7 +7,6 @@ import numpy as np
 from collections import deque
 from gmsdk import *
 from math import log
-
 eps = 1e-6
 
 class StatArb(StrategyBase):
@@ -94,6 +93,7 @@ class StatArb(StrategyBase):
         self.pos_side_down = False
 
     def algo_action(self):
+        # type: () -> object
 
         latest_a = self.close_buffer_symbol_a.pop()
         lna = log(latest_a)
@@ -154,4 +154,4 @@ if __name__ == '__main__':
     #import pdb; pdb.set_trace()
     dm = StatArb(config_file='strategy_sa.ini')
     ret = dm.run()
-    print "Statistics Arbitrage: ", dm.get_strerror(ret)
+    print("Statistics Arbitrage: ", dm.get_strerror(ret))

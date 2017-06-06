@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -63,7 +63,7 @@ class ATR_STOCK(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -207,7 +207,7 @@ class ATR_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -317,7 +317,7 @@ class ATR_STOCK(StrategyBase):
 
         symbol = bar.exchange + '.' + bar.sec_id
 
-        if self.dict_prev_close.has_key(symbol) and self.dict_prev_close[symbol] is None:
+        if symbol in self.dict_prev_close and self.dict_prev_close[symbol] is None:
             self.dict_prev_close[symbol] = bar.open
 
         self.movement_stop_profit_loss(bar)
@@ -326,7 +326,7 @@ class ATR_STOCK(StrategyBase):
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
         # 补充当天价格
-        if self.dict_price.has_key(symbol):
+        if symbol in self.dict_price:
             if self.dict_price[symbol][0][-1] < bar.high:
                 self.dict_price[symbol][0][-1] = bar.high
 
@@ -337,7 +337,7 @@ class ATR_STOCK(StrategyBase):
 
         if self.dict_open_close_signal[symbol] is False:
             # 当天未有对该代码开、平仓
-            if self.dict_price.has_key(symbol):
+            if symbol in self.dict_price:
 
                 atr_index = talib.ATR(high=self.dict_price[symbol][0],
                                       low=self.dict_price[symbol][1],
@@ -357,7 +357,7 @@ class ATR_STOCK(StrategyBase):
                         cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                     if cur_open_vol == 0:
-                        print 'no available cash to buy, available cash: %.2f' % cash.available
+                        print('no available cash to buy, available cash: %.2f' % cash.available)
                     else:
                         self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
                         self.dict_open_close_signal[symbol] = True
@@ -370,7 +370,7 @@ class ATR_STOCK(StrategyBase):
                         self.dict_open_close_signal[symbol] = True
                         logging.info('close long, symbol:%s, time:%s, price:%.2f' % (symbol, bar.strtime, bar.close))
 
-        if self.dict_prev_close.has_key(symbol):
+        if symbol in self.dict_prev_close:
             self.dict_prev_close[symbol] = bar.close
 
     def on_order_filled(self, order):
@@ -426,7 +426,7 @@ class ATR_STOCK(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -464,7 +464,7 @@ class ATR_STOCK(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     logging.config.fileConfig('atr_stock.ini')
     ATR_STOCK.read_ini('atr_stock.ini')
     ATR_STOCK.get_strategy_conf()
@@ -491,4 +491,4 @@ if __name__ == '__main__':
     atr_stock.init_strategy()
     ret = atr_stock.run()
 
-print 'run result %s' % ret
+print('run result %s' % ret)

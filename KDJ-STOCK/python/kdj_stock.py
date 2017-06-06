@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -51,7 +51,7 @@ class KDJ_STOCK(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -198,7 +198,7 @@ class KDJ_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -313,7 +313,7 @@ class KDJ_STOCK(StrategyBase):
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
         # 补充当天价格
-        if self.dict_price.has_key(symbol):
+        if symbol in self.dict_price:
             if self.dict_price[symbol][0][-1] < bar.high:
                 self.dict_price[symbol][0][-1] = bar.high
 
@@ -324,7 +324,7 @@ class KDJ_STOCK(StrategyBase):
 
         if self.dict_open_close_signal[symbol] is False:
             # 当天未有对该代码开、平仓
-            if self.dict_price.has_key(symbol):
+            if symbol in self.dict_price:
                 slowk, slowd = talib.STOCH(high=self.dict_price[symbol][0],
                                            low=self.dict_price[symbol][1],
                                            close=self.dict_price[symbol][2],
@@ -347,7 +347,7 @@ class KDJ_STOCK(StrategyBase):
                         cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                     if cur_open_vol == 0:
-                        print 'no available cash to buy, available cash: %.2f' % cash.available
+                        print('no available cash to buy, available cash: %.2f' % cash.available)
                     else:
                         self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
                         self.dict_open_close_signal[symbol] = True
@@ -412,7 +412,7 @@ class KDJ_STOCK(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -449,7 +449,7 @@ class KDJ_STOCK(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     logging.config.fileConfig('kdj_stock.ini')
     KDJ_STOCK.read_ini('kdj_stock.ini')
     KDJ_STOCK.get_strategy_conf()
@@ -476,4 +476,4 @@ if __name__ == '__main__':
     kdj_stock.init_strategy()
     ret = kdj_stock.run()
 
-print 'run result %s' % ret
+print('run result %s' % ret)
