@@ -4,7 +4,7 @@
 import sys
 import logging
 import logging.config
-import ConfigParser
+import configparser
 import csv
 import numpy as np
 import datetime
@@ -67,7 +67,7 @@ class AR_MA_STOCK(StrategyBase):
         """
         功能：读取策略配置文件
         """
-        cls.cls_config = ConfigParser.ConfigParser()
+        cls.cls_config = configparser.ConfigParser()
         cls.cls_config.read(ini_name)
 
     @classmethod
@@ -213,7 +213,7 @@ class AR_MA_STOCK(StrategyBase):
             if len(end_daily_bars) <= 0:
                 continue
 
-            if not self.dict_last_factor.has_key(ticker):
+            if ticker not in self.dict_last_factor:
                 continue
 
             end_adj_factor = self.dict_last_factor[ticker]
@@ -305,8 +305,8 @@ class AR_MA_STOCK(StrategyBase):
         high_ls = self.dict_price[ticker][1][len(self.dict_price[ticker][1]) - self.ar_period:]
         low_ls = self.dict_price[ticker][2][len(self.dict_price[ticker][2]) - self.ar_period:]
 
-        high_minus_ls = map(lambda (a, b): a - b, zip(high_ls, open_ls))
-        low_minus_ls = map(lambda (a, b): a - b, zip(open_ls, low_ls))
+        high_minus_ls = [a_b[0] - a_b[1] for a_b in zip(high_ls, open_ls)]
+        low_minus_ls = [a_b1[0] - a_b1[1] for a_b1 in zip(open_ls, low_ls)]
 
         ar_index = 0.0
         for pos in range(len(high_minus_ls)):
@@ -369,7 +369,7 @@ class AR_MA_STOCK(StrategyBase):
         pos = self.get_position(bar.exchange, bar.sec_id, OrderSide_Bid)
 
         # 补充当天价格
-        if self.dict_price.has_key(symbol):
+        if symbol in self.dict_price:
             self.dict_price[symbol][0][-1] = bar.open
 
             if self.dict_price[symbol][1][-1] < bar.high:
@@ -382,7 +382,7 @@ class AR_MA_STOCK(StrategyBase):
 
         if self.dict_open_close_signal[symbol] is False:
             # 当天未有对该代码开、平仓
-            if self.dict_price.has_key(symbol):
+            if symbol in self.dict_price:
 
                 ma_short = talib.MA(self.dict_price[symbol][3], self.short_period)
                 ma_mid = talib.MA(self.dict_price[symbol][3], self.mid_period)
@@ -403,7 +403,7 @@ class AR_MA_STOCK(StrategyBase):
                             cur_open_vol = int(cash.available / bar.close / 100) * 100
 
                         if cur_open_vol == 0:
-                            print 'no available cash to buy, available cash: %.2f' % cash.available
+                            print('no available cash to buy, available cash: %.2f' % cash.available)
                         else:
                             self.open_long(bar.exchange, bar.sec_id, bar.close, cur_open_vol)
                             self.dict_open_close_signal[symbol] = True
@@ -471,7 +471,7 @@ class AR_MA_STOCK(StrategyBase):
         is_stop_profit = True
 
         if pos is not None and pos.volume > 0:
-            if self.dict_entry_high_low.has_key(symbol):
+            if symbol in self.dict_entry_high_low:
                 if self.dict_entry_high_low[symbol][0] < bar.close:
                     self.dict_entry_high_low[symbol][0] = bar.close
                     is_stop_profit = False
@@ -509,7 +509,7 @@ class AR_MA_STOCK(StrategyBase):
 
 
 if __name__ == '__main__':
-    print get_version()
+    print(get_version())
     logging.config.fileConfig('ar_ma_stock.ini')
     AR_MA_STOCK.read_ini('ar_ma_stock.ini')
     AR_MA_STOCK.get_strategy_conf()
@@ -537,4 +537,4 @@ if __name__ == '__main__':
     ret = ar_ma_stock.run()
 
 
-print 'run result %s' % ret
+print('run result %s' % ret)
