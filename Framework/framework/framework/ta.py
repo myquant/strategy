@@ -100,11 +100,11 @@ class TAStrategy(StrategyBase, TAMixin, PositionMixin, OrderMixin, VolumeMixin):
         ps = self.get_positions()
         for p in ps:
             sym = ".".join([p.exchange, p.sec_id])
-            symbols.append(sym)
+            symbols.add(sym)
 
             if self.mode in (2,3) or self.backtest_use_tick:
-                subscribe_symbols.append(sym + ".tick")
-            subscribe_symbols.append("{}.bar.{}".format(sym, sub_suffix))   ## bar according to configured bar_type
+                subscribe_symbols.add(sym + ".tick")
+            subscribe_symbols.add("{}.bar.{}".format(sym, sub_suffix))   ## bar according to configured bar_type
 
         for p in ps:
             highest_price, lowest_price = self.get_highest_lowest_price_since_open(sym, p.init_time)
@@ -114,30 +114,33 @@ class TAStrategy(StrategyBase, TAMixin, PositionMixin, OrderMixin, VolumeMixin):
 
         self.history_data(symbols, self.bar_type, self.window_size)
 
-        subscribe_symbols.append("SHSE.000001.tick")   ## 上证指数
+        subscribe_symbols.add("SHSE.000001.tick")   ## 上证指数
 
-        subscribe_symbols.append("SHSE.000001.bar.{}".format(sub_suffix))   ## bar according to configured bar_type
+        subscribe_symbols.add("SHSE.000001.bar.{}".format(sub_suffix))   ## bar according to configured bar_type
 
         self.logger.info("subscribe symbols: {}".format(subscribe_symbols))
 
-        ## subscribe
+        # subscribe
         self.subscribe(",".join(subscribe_symbols))
 
     def prepare_subscribe_symbols(self, csv_file):
-        symbols = []
-        subscribe_symbols = []
+        symbols = set()
+        subscribe_symbols = set()
         sub_suffix = "daily" if self.bar_type == '1d' else str(self.bar_type)
 
         with open(csv_file, 'r') as csvfile:
             reader = csv.reader(csvfile)
             for row in reader:
+                if not len(row):
+                    return
+
                 t = row[0]
-                symbols.append(t)
+                symbols.add(t)
                 # exchange, sec_id = t.split(".")
 
                 if self.mode in (2, 3) or self.backtest_use_tick:
-                    subscribe_symbols.append(t + ".tick")
-                subscribe_symbols.append("{}.bar.{}".format(t, sub_suffix))  ## bar according to configured bar_type
+                    subscribe_symbols.add(t + ".tick")
+                subscribe_symbols.add("{}.bar.{}".format(t, sub_suffix))  ## bar according to configured bar_type
         return subscribe_symbols, symbols
 
     def set_algo(self, algo_func):
