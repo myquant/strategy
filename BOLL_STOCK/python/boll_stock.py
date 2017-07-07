@@ -101,7 +101,7 @@ class BOLL_STOCK(StrategyBase):
         """
         功能：获取股票池中的代码
         """
-        csvfile = file(csv_file, 'rb')
+        csvfile = open(csv_file, 'r')
         reader = csv.reader(csvfile)
         for line in reader:
             cls.cls_stock_pool.append(line[0])
@@ -419,7 +419,7 @@ class BOLL_STOCK(StrategyBase):
 
 if __name__ == '__main__':
     print(get_version())
-    logging.config.fileConfig('boll_stock.ini')
+    logging.config.fileConfig('logging.ini')
     BOLL_STOCK.read_ini('boll_stock.ini')
     BOLL_STOCK.get_strategy_conf()
 
