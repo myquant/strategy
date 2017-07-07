@@ -439,7 +439,7 @@ if __name__ == '__main__':
                                          commission_ratio=BOLL_STOCK.cls_commission_ratio,
                                          slippage_ratio=BOLL_STOCK.cls_slippage_ratio,
                                          price_type=BOLL_STOCK.cls_price_type,
-                                         bench_symbol=BOLL_STOCK.cls_bench_symbol)
+                                         bench_symbol=str(BOLL_STOCK.cls_bench_symbol))
 
     boll_stock.get_para_conf()
     boll_stock.init_strategy()
