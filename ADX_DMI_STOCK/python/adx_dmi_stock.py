@@ -126,7 +126,7 @@ class ADX_DMI_STOCK(StrategyBase):
         """
         功能：获取股票池中的代码
         """
-        csvfile = file(csv_file, 'rb')
+        csvfile = file(csv_file, 'r')
         reader = csv.reader(csvfile)
         for line in reader:
             cls.cls_stock_pool.append(line[0])
@@ -499,6 +499,8 @@ class ADX_DMI_STOCK(StrategyBase):
 if __name__ == '__main__':
     print(get_version())
     logging.config.fileConfig('adx_dmi_stock.ini')
+    import sys
+    sys.getfilesystemencoding()
     ADX_DMI_STOCK.read_ini('adx_dmi_stock.ini')
     ADX_DMI_STOCK.get_strategy_conf()
 

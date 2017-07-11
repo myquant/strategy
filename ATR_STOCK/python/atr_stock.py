@@ -115,7 +115,7 @@ class ATR_STOCK(StrategyBase):
         """
         功能：获取股票池中的代码
         """
-        csvfile = file(csv_file, 'rb')
+        csvfile = open(csv_file, 'r')
         reader = csv.reader(csvfile)
         for line in reader:
             cls.cls_stock_pool.append(line[0])
